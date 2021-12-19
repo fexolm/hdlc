@@ -121,13 +121,14 @@ func (s *scanner) readImports() ([]string, error) {
 }
 
 func (s *scanner) readChipSignarure() (*ChipSignarure, error) {
-	ins, err := s.readParam()
+	ins, err := s.readParams()
 	if err != nil {
 		return nil, err
 	}
 
 	s.skipSpaces()
-	outs, err := s.readParam()
+	// TODO: it's not a field list
+	outs, err := s.readFieldList()
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (s *scanner) readFieldList() ([]string, error) {
 }
 
 func (s *scanner) readChipImpl() (*ChipBody, error) {
-	wiresMap := make(map[string]*Wire)
+	valuesMap := make(map[string]*Value)
 
 	bracket := s.readChar()
 	if bracket == nil || *bracket != '{' {
@@ -166,7 +167,7 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 	}
 
 	chips := []*ChipOp{}
-	results := []*Wire{}
+	results := []*Value{}
 
 	for *s.peekChar() != '}' {
 		w := s.peekWord()
@@ -180,7 +181,7 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 			s.skipSpaces()
 			res, err := s.readFieldList()
 			for _, v := range res {
-				w, ok := wiresMap[v]
+				w, ok := valuesMap[v]
 				if !ok {
 					return nil, errors.New("returned wire not initialized")
 				}
@@ -196,17 +197,17 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 		} else {
 			names, err := s.readFieldList()
 
-			outs:= make([]*Wire, 0)
+			outs:= make([]*Value, 0)
 
 			for _, n := range names {
-				if w, ok := wiresMap[n]; ok {
+				if w, ok := valuesMap[n]; ok {
 					// TODO: assign wire type
 					// TODO: assign parent
 					outs = append(outs, w)
 				} else {
-					res := &Wire{n, ""}
+					res := &Value{n, ""}
 					outs = append(outs, res)
-					wiresMap[n] = res
+					valuesMap[n] = res
 				}
 			}
 
@@ -240,19 +241,19 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 			_ = s.readChar()
 			s.skipSpaces()
 			paramNames, err := s.readFieldList()
-			args := []*Wire {}
+			args := []*Value{}
 			if err != nil {
 				return nil, err
 			}
 
 			for _, n := range paramNames {
-				if w, ok := wiresMap[n]; ok {
+				if w, ok := valuesMap[n]; ok {
 					// TODO: add usage
 					args = append(args, w)
 				} else {
-					arg := &Wire{n, ""}
+					arg := &Value{n, ""}
 					args = append(args, arg)
-					wiresMap[n] = arg
+					valuesMap[n] = arg
 				}
 			}
 			// skip bracket
@@ -275,8 +276,8 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 	return &ChipBody{Chips: chips, Results: results}, nil
 }
 
-func (s *scanner) readParam() ([]*Param, error) {
-	ws := make([]*Param, 0)
+func (s *scanner) readParams() ([]*Value, error) {
+	ws := make([]*Value, 0)
 
 	bracket := s.readChar()
 	if bracket == nil || *bracket != '(' {
@@ -296,7 +297,7 @@ func (s *scanner) readParam() ([]*Param, error) {
 			return nil, errors.New("expected wire type, found eof")
 		}
 
-		ws = append(ws, &Param{string(name), Type(typ)})
+		ws = append(ws, &Value{string(name), Type(typ)})
 		s.skipSpaces()
 		ch := s.peekChar()
 		if ch == nil {
