@@ -153,6 +153,8 @@ func (s *scanner) readFieldList() ([]string, error) {
 }
 
 func (s *scanner) readChipImpl() (*ChipBody, error) {
+	wiresMap := make(map[string]*Wire)
+
 	bracket := s.readChar()
 	if bracket == nil || *bracket != '{' {
 		return nil, errors.New("expected ( symbol")
@@ -164,7 +166,7 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 	}
 
 	chips := []*ChipOp{}
-	results := []string{}
+	results := []*Wire{}
 
 	for *s.peekChar() != '}' {
 		w := s.peekWord()
@@ -176,8 +178,15 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 		if string(w) == "return" {
 			_ = s.readWord()
 			s.skipSpaces()
-			var err error
-			results, err = s.readFieldList()
+			res, err := s.readFieldList()
+			for _, v := range res {
+				w, ok := wiresMap[v]
+				if !ok {
+					return nil, errors.New("returned wire not initialized")
+				}
+				results = append(results, w)
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -186,6 +195,20 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 			fmt.Printf("results: %v\n", results)
 		} else {
 			names, err := s.readFieldList()
+
+			outs:= make([]*Wire, 0)
+
+			for _, n := range names {
+				if w, ok := wiresMap[n]; ok {
+					// TODO: assign wire type
+					// TODO: assign parent
+					outs = append(outs, w)
+				} else {
+					res := &Wire{n, ""}
+					outs = append(outs, res)
+					wiresMap[n] = res
+				}
+			}
 
 			if err != nil {
 				return nil, err
@@ -216,14 +239,26 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 			// skip bracket
 			_ = s.readChar()
 			s.skipSpaces()
-			params, err := s.readFieldList()
+			paramNames, err := s.readFieldList()
+			args := []*Wire {}
 			if err != nil {
 				return nil, err
+			}
+
+			for _, n := range paramNames {
+				if w, ok := wiresMap[n]; ok {
+					// TODO: add usage
+					args = append(args, w)
+				} else {
+					arg := &Wire{n, ""}
+					args = append(args, arg)
+					wiresMap[n] = arg
+				}
 			}
 			// skip bracket
 			_ = s.readChar()
 			s.skipSpaces()
-			chips = append(chips, &ChipOp{names, chipName, params})
+			chips = append(chips, &ChipOp{chipName, args, outs})
 		}
 
 		s.skipSpaces()
@@ -261,7 +296,7 @@ func (s *scanner) readParam() ([]*Param, error) {
 			return nil, errors.New("expected wire type, found eof")
 		}
 
-		ws = append(ws, &Param{string(name), string(typ)})
+		ws = append(ws, &Param{string(name), Type(typ)})
 		s.skipSpaces()
 		ch := s.peekChar()
 		if ch == nil {

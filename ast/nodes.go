@@ -10,9 +10,16 @@ func NewPackage(name string, imports []string, chips []*Chip) *Package {
 	return &Package{Name: name, Imports: imports, Chips: chips}
 }
 
+type Type string
+
 type Param struct {
 	Name string
-	Type string
+	Typ Type 
+}
+
+type Wire struct {
+	Name string
+	Typ Type
 }
 
 type ChipSignarure struct {
@@ -21,14 +28,14 @@ type ChipSignarure struct {
 }
 
 type ChipOp struct {
-	Results  []string
 	ChipName string
-	Params   []string
+	Args  []*Wire
+	Results []*Wire
 }
 
 type ChipBody struct {
 	Chips   []*ChipOp
-	Results []string
+	Results []*Wire
 }
 
 type Chip struct {
