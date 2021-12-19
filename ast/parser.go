@@ -197,7 +197,7 @@ func (s *scanner) readChipImpl() (*ChipBody, error) {
 		} else {
 			names, err := s.readFieldList()
 
-			outs:= make([]*Value, 0)
+			outs := make([]*Value, 0)
 
 			for _, n := range names {
 				if w, ok := valuesMap[n]; ok {

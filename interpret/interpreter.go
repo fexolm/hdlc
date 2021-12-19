@@ -8,16 +8,16 @@ type Interpreter struct {
 	chips map[string]*Chip
 }
 
-type WireState bool 
+type WireState bool
 
 type Chip struct {
-	ir *ast.Chip
+	ir          *ast.Chip
 	interpreter *Interpreter
-	wires map[string] WireState
+	wires       map[string]WireState
 }
 
 func NewInterpreter(pkg *ast.Package) *Interpreter {
-	chips :=make(map[string]*Chip)
+	chips := make(map[string]*Chip)
 	i := &Interpreter{chips}
 	for _, c := range pkg.Chips {
 		i.chips[c.Name] = i.makeChip(c)
@@ -26,7 +26,7 @@ func NewInterpreter(pkg *ast.Package) *Interpreter {
 }
 
 func (i *Interpreter) makeChip(impl *ast.Chip) *Chip {
-	chip := &Chip{impl, i, make(map[string] WireState)}
+	chip := &Chip{impl, i, make(map[string]WireState)}
 
 	for _, c := range impl.Impl.Chips {
 		for _, inp := range c.Results {
@@ -37,8 +37,8 @@ func (i *Interpreter) makeChip(impl *ast.Chip) *Chip {
 	return chip
 }
 
-func (i * Interpreter) runNand(inputs []WireState) []WireState {
-	return []WireState {!(inputs[0] && inputs[1])}
+func (i *Interpreter) runNand(inputs []WireState) []WireState {
+	return []WireState{!(inputs[0] && inputs[1])}
 }
 
 func (c *Chip) run(inputs []WireState) []WireState {
@@ -47,7 +47,7 @@ func (c *Chip) run(inputs []WireState) []WireState {
 	}
 
 	for _, ch := range c.ir.Impl.Chips {
-		args := []WireState {}
+		args := []WireState{}
 		for _, a := range ch.Args {
 			args = append(args, c.wires[a.Name])
 		}
@@ -72,4 +72,3 @@ func (i *Interpreter) Run(entry string, inputs []WireState) []WireState {
 	println(entry)
 	return i.chips[entry].run(inputs)
 }
-

@@ -14,18 +14,18 @@ type Type string
 
 type Value struct {
 	Name string
-	Typ Type
+	Typ  Type
 }
 
 type ChipSignarure struct {
 	Inputs  []*Value
-	Outputs []string // TODO: []Type 
+	Outputs []string // TODO: []Type
 }
 
 type ChipOp struct {
 	ChipName string
-	Args  []*Value
-	Results []*Value
+	Args     []*Value
+	Results  []*Value
 }
 
 type ChipBody struct {

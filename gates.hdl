@@ -13,3 +13,8 @@ chip AndThreeWay(a wire, b wire, c wire) wire {
 	res := And(tmp, c)
 	return res
 }
+
+chip Not(a wire) wire {
+	res := builtin.Nand(a, a)
+	return res
+}
