@@ -337,7 +337,7 @@ func (s *scanner) readChip() (*Chip, error) {
 		return nil, err
 	}
 
-	chip := &Chip{string(chipName), iface, impl}
+	chip := &Chip{s.pkgName + "." + string(chipName), iface, impl}
 
 	return chip, nil
 }

@@ -14,7 +14,7 @@ type Type string
 
 type Param struct {
 	Name string
-	Typ Type 
+	Typ Type
 }
 
 type Wire struct {

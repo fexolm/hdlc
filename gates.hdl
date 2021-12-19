@@ -4,6 +4,12 @@ import (
 
 chip And(a wire, b wire) (out wire) {
     tmp := builtin.Nand(a, b)
-    tmpA := builtin.Nand(tmp, tmp)
-    return tmpA
+    res := builtin.Nand(tmp, tmp)
+    return res 
+}
+
+chip AndThreeWay(a wire, b wire, c wire) (out wire) {
+	tmp := And(a, b)
+	res := And(tmp, c)
+	return res
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/fexolm/hdlc/ast"
+	"github.com/fexolm/hdlc/interpret"
 )
 
 func main() {
@@ -13,21 +14,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%v\n", pkg)
+	i := interpret.NewInterpreter(pkg)
 
-	for _, c := range pkg.Chips {
-		fmt.Printf("%+v\n", c)
-		fmt.Printf("%+v\n", c.Interface)
-
-		for _, i := range c.Interface.Inputs {
-			fmt.Printf("%+v\n", i)
-		}
-
-		for _, i := range c.Interface.Outputs {
-			fmt.Printf("%+v\n", i)
-		}
-
-		fmt.Printf("%+v\n", c.Impl)
-	}
-
+	fmt.Printf("%v\n", i.Run("gates.AndThreeWay", []interpret.WireState{false, false, false}))
+	fmt.Printf("%v\n", i.Run("gates.AndThreeWay", []interpret.WireState{false, false, true}))
+	fmt.Printf("%v\n", i.Run("gates.AndThreeWay", []interpret.WireState{true, false, true}))
+	fmt.Printf("%v\n", i.Run("gates.AndThreeWay", []interpret.WireState{true, true, true}))
 }
