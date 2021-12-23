@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 class ParserError : std::exception {
 private:
@@ -131,7 +132,13 @@ private:
 
     skip_spaces();
 
+    std::unordered_map<std::string, std::shared_ptr<ast::Value>> local_vars;
+
     auto params = read_params();
+
+    for (auto &p : params) {
+      local_vars[p->ident] = p;
+    }
 
     skip_spaces();
 
@@ -143,7 +150,7 @@ private:
 
     skip_spaces();
 
-    auto body = read_chip_body();
+    auto body = read_chip_body(local_vars);
 
     auto chip = std::make_shared<ast::Chip>();
     chip->ident = name;
@@ -156,7 +163,9 @@ private:
 
   std::vector<std::shared_ptr<ast::Value>> read_params() {
     std::vector<std::shared_ptr<ast::Value>> res;
-
+    if (peek_symbol() == ')') {
+      return res;
+    }
     while (true) {
       auto val = read_value();
       res.push_back(val);
@@ -186,6 +195,10 @@ private:
   std::vector<std::shared_ptr<ast::Type>> read_return_types() {
     std::vector<std::shared_ptr<ast::Type>> res;
 
+    if (peek_symbol() == '{') {
+      return res;
+    }
+
     while (true) {
       std::string type(read_string());
       res.push_back(std::make_shared<ast::Type>(type));
@@ -201,14 +214,16 @@ private:
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Stmt>> read_chip_body() {
+  std::vector<std::shared_ptr<ast::Stmt>>
+  read_chip_body(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                     &symbol_map) {
     std::vector<std::shared_ptr<ast::Stmt>> res;
 
     expect_symbol_sequence("{");
     skip_spaces();
 
     while (peek_symbol() != '}') {
-      auto stmt = read_stmt();
+      auto stmt = read_stmt(symbol_map);
       res.push_back(stmt);
       skip_spaces();
     }
@@ -218,55 +233,103 @@ private:
     return res;
   }
 
-  std::shared_ptr<ast::Stmt> read_stmt() {
+  std::shared_ptr<ast::Stmt>
+  read_stmt(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                &symbol_map) {
     auto w = peek_string();
 
     if (w == "return") {
-      return read_ret_stmt();
+      return read_ret_stmt(symbol_map);
+    } else if (w == "reg") {
+      return read_reg_init(symbol_map);
     } else {
-      return read_assign_stmt();
+      // TODO: add regWriteStmt support
+      return read_assign_stmt(symbol_map);
     }
   }
 
-  std::shared_ptr<ast::RetStmt> read_ret_stmt() {
+  std::shared_ptr<ast::RegInit>
+  read_reg_init(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                    &symbol_map) {
+    expect_symbol_sequence("reg");
+    skip_spaces();
+    std::string name(read_ident());
+    if (symbol_map.count(name)) {
+      throw ParserError("Creating register with existing name", line, line_pos);
+    }
+
+    symbol_map[name] = std::make_shared<ast::Value>(name, nullptr);
+    return std::make_shared<ast::RegInit>(symbol_map[name]);
+  }
+
+  std::shared_ptr<ast::RetStmt>
+  read_ret_stmt(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                    &symbol_map) {
     expect_symbol_sequence("return");
     skip_spaces();
 
     auto res = std::make_shared<ast::RetStmt>();
-    res->results = read_expr_list();
+    res->results = read_expr_list(symbol_map);
     return res;
   }
 
-  std::shared_ptr<ast::AssignStmt> read_assign_stmt() {
+  std::shared_ptr<ast::AssignStmt>
+  read_assign_stmt(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                       &symbol_map) {
     auto res = std::make_shared<ast::AssignStmt>();
-    res->assignees = read_ident_list();
+    res->assignees = read_ident_list(symbol_map);
     skip_spaces();
     expect_symbol_sequence(":=");
     skip_spaces();
-    res->rhs = read_expr();
+    res->rhs = read_expr(symbol_map);
     return res;
   }
 
-  std::shared_ptr<ast::Expr> read_expr() {
+  std::shared_ptr<ast::Expr>
+  read_expr(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                &symbol_map) {
+    if (peek_symbol() == '<') {
+      return read_reg_read(symbol_map);
+    }
+
     std::string ident(read_ident());
     skip_spaces();
     if (peek_symbol() == '(') {
       expect_symbol_sequence("(");
       skip_spaces();
-      auto params = read_expr_list();
+      auto params = read_expr_list(symbol_map);
       skip_spaces();
       expect_symbol_sequence(")");
       return std::make_shared<ast::CallExpr>(ident, params);
     }
 
-    return std::make_shared<ast::Value>(ident, nullptr);
+    if (!symbol_map.count(ident)) {
+      throw ParserError("Referenced variable not initialized", line, line_pos);
+    }
+    return symbol_map[ident];
   }
 
-  std::vector<std::shared_ptr<ast::Expr>> read_expr_list() {
+  std::shared_ptr<ast::RegRead>
+  read_reg_read(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                    &symbol_map) {
+    expect_symbol_sequence("<-");
+    skip_spaces();
+    std::string ident(read_ident());
+
+    if (!symbol_map.count(ident)) {
+      throw ParserError("Referenced variable not initialized", line, line_pos);
+    }
+
+    return std::make_shared<ast::RegRead>(symbol_map[ident]);
+  }
+
+  std::vector<std::shared_ptr<ast::Expr>>
+  read_expr_list(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                     &symbol_map) {
     std::vector<std::shared_ptr<ast::Expr>> res;
 
     while (true) {
-      res.push_back(read_expr());
+      res.push_back(read_expr(symbol_map));
       skip_spaces();
       if (peek_symbol() == ',') {
         read_symbol();
@@ -279,12 +342,22 @@ private:
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Value>> read_ident_list() {
+  std::vector<std::shared_ptr<ast::Value>>
+  read_ident_list(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                      &symbol_map) {
     std::vector<std::shared_ptr<ast::Value>> res;
 
     while (true) {
-      res.emplace_back(
-          std::make_shared<ast::Value>(std::string(read_ident()), nullptr));
+      auto val =
+          std::make_shared<ast::Value>(std::string(read_ident()), nullptr);
+
+      if (symbol_map.count(val->ident)) {
+        throw ParserError("Multiple assign to local variable", line, line_pos);
+      }
+
+      res.emplace_back(val);
+      symbol_map[val->ident] = val;
+
       skip_spaces();
       if (peek_symbol() == ',') {
         read_symbol();

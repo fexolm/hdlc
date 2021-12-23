@@ -165,10 +165,12 @@ int main() {
                    (std::istreambuf_iterator<char>()));
 
   Parser p(code);
-
-  auto pkg = p.read_package("gates");
-
-  for (auto &c : pkg->chips) {
-    std::cout << c->ident << std::endl;
+  try {
+    auto pkg = p.read_package("gates");
+    ast::Printer v;
+    v.visit(*pkg);
+  } catch (ParserError &e) {
+    std::cout << e.what() << std::endl;
+    throw;
   }
 }
