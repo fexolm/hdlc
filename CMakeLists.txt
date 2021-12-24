@@ -6,23 +6,12 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(LLVM REQUIRED CONFIG)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+add_subdirectory(hdlc)
 
-include_directories(${LLVM_INCLUDE_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
+add_subdirectory(tests)
 
 add_executable(main main.cpp)
 
-llvm_map_components_to_libnames(llvm_libs 
-    Core
-    ExecutionEngine
-    Interpreter
-    MC
-    MCJIT
-    Support
-    nativecodegen
-)
-target_link_libraries(main ${llvm_libs})
+target_link_libraries(main hdlc)
