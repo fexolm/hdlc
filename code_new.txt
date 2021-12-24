@@ -7,10 +7,12 @@ chip And3(a wire, b wire, c wire) wire {
 	return And(a, And(b, c))
 }
 
-chip TestRegs(b wire) wire {
-	reg a
-	a <- b
-	return <- a
+chip TestRegs(r reg[2], cur wire[4]) wire[4] {
+	r <- cur[0:2]
+	prev[0:2] := <- r
+	prev[2:4] = cur[2:4]
+
+	return prev
 }
 
 chip Empty() {}

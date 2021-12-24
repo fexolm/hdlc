@@ -128,74 +128,77 @@ struct RegRead : Expr {
 };
 
 struct Printer : Visitor {
+  std::ostream &out;
+
+  Printer(std::ostream &out) : out(out) {}
   void visit(Package &pkg) {
-    std::cout << "Package: " << pkg.name << "\n\n";
+    out << "Package: " << pkg.name << "\n\n";
     for (auto &c : pkg.chips) {
       c->visit(*this);
     }
   }
   void visit(Chip &chip) {
-    std::cout << "chip " << chip.ident << " (";
+    out << "chip " << chip.ident << " (";
     for (auto &i : chip.inputs) {
       i->visit(*this);
-      std::cout << ", ";
+      out << ", ";
     }
-    std::cout << ") ";
+    out << ") ";
 
     for (auto &o : chip.outputs) {
-      std::cout << o->name << ", ";
+      out << o->name << ", ";
     }
-    std::cout << "{" << std::endl;
+    out << "{" << std::endl;
 
     for (auto &s : chip.body) {
       s->visit(*this);
-      std::cout << std::endl;
+      out << std::endl;
     }
-    std::cout << "}"
-              << "\n\n";
+    out << "}"
+        << "\n\n";
   }
 
-  void visit(Value &val) { std::cout << val.ident; }
+  void visit(Value &val) { out << val.ident; }
   void visit(AssignStmt &stmt) {
-    std::cout << "    ";
+    out << "    ";
     for (auto &v : stmt.assignees) {
       v->visit(*this);
-      std::cout << ", ";
+      out << ", ";
     }
-    std::cout << ":= ";
+    out << ":= ";
 
     stmt.rhs->visit(*this);
   }
   void visit(CallExpr &expr) {
-    std::cout << expr.chip_name << "(";
+    out << expr.chip_name << "(";
     for (auto &arg : expr.args) {
       arg->visit(*this);
-      std::cout << ", ";
+      out << ", ";
     }
-    std::cout << ")";
+    out << ")";
   }
   void visit(RetStmt &stmt) {
-    std::cout << "    return ";
+    out << "    return ";
     for (auto &v : stmt.results) {
       v->visit(*this);
-      std::cout << ", ";
+      out << ", ";
     }
   }
 
   void visit(RegInit &init) {
-    std::cout << "    reg ";
+    out << "    reg ";
     init.reg->visit(*this);
   }
 
   void visit(RegWrite &rw) {
-    std::cout << "    ";
+    out << "    ";
     rw.reg->visit(*this);
-    std::cout << " <- ";
+    out << " <- ";
     rw.rhs->visit(*this);
   }
 
   void visit(RegRead &rr) {
-    std::cout << "<- ";
+    out << "<- ";
     rr.reg->visit(*this);
   }
 };

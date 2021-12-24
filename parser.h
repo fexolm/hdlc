@@ -6,7 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 
-class ParserError : std::exception {
+class ParserError : public std::exception {
 private:
   std::string message;
 
@@ -27,6 +27,8 @@ private:
   size_t pos;
   size_t line;
   size_t line_pos;
+
+  std::vector<size_t> line_length;
 
 public:
   explicit Parser(std::string data) : data(std::move(data)), pos(0) {}
@@ -50,6 +52,9 @@ private:
     if (pos < data.size()) {
       auto sym = data[pos];
       if (sym == '\n') {
+        if (line_length.size() < line) {
+          line_length.push_back(line_pos);
+        }
         line++;
         line_pos = 0;
       } else {
@@ -61,9 +66,20 @@ private:
     return -1;
   }
 
-  void skip_to(size_t new_pos) {
-    for (; pos < new_pos; read_symbol())
-      ;
+  void move_to(size_t new_pos) {
+    if (pos <= new_pos) {
+      for (; pos < new_pos; read_symbol())
+        ;
+    } else {
+      for (; pos >= 0 && pos > new_pos; --pos) {
+        if (data[pos] == '\n') {
+          line--;
+          line_pos = line_length[line];
+        } else {
+          line_pos--;
+        }
+      }
+    }
   }
 
   char peek_symbol() {
@@ -81,7 +97,7 @@ private:
   }
 
   void skip_spaces() {
-    skip_to(get_end_pos([](char c) { return std::isspace(c); }));
+    move_to(get_end_pos([](char c) { return std::isspace(c); }));
   }
 
   template <typename P> std::string_view peak_symbol_sequence(P predicate) {
@@ -92,7 +108,7 @@ private:
 
   template <typename P> std::string_view read_symbol_sequence(P predicate) {
     auto res = peak_symbol_sequence(predicate);
-    skip_to(pos + res.size());
+    move_to(pos + res.size());
     return res;
   }
 
@@ -243,9 +259,34 @@ private:
     } else if (w == "reg") {
       return read_reg_init(symbol_map);
     } else {
+
       // TODO: add regWriteStmt support
-      return read_assign_stmt(symbol_map);
+      auto saved_pos = pos;
+      try {
+        return read_assign_stmt(symbol_map);
+      } catch (ParserError &e) {
+        move_to(saved_pos);
+        return read_reg_write(symbol_map);
+      }
     }
+  }
+
+  std::shared_ptr<ast::RegWrite>
+  read_reg_write(std::unordered_map<std::string, std::shared_ptr<ast::Value>>
+                     &symbol_map) {
+    std::string reg_name(read_ident());
+
+    if (!symbol_map.count(reg_name)) {
+      throw ParserError("Register with name " + reg_name +
+                            " was not initialized",
+                        line, line_pos);
+    }
+    auto reg = symbol_map[reg_name];
+    skip_spaces();
+    expect_symbol_sequence("<-");
+    skip_spaces();
+    auto rhs = read_expr(symbol_map);
+    return std::make_shared<ast::RegWrite>(reg, rhs);
   }
 
   std::shared_ptr<ast::RegInit>
