@@ -2,10 +2,13 @@
 
 chip And (a wire, b wire) wire {
 	tmp := Nand(a, b)
-	return Nand(tmp, tmp)
+	res := Nand(tmp, tmp)
+	return res
 }
 
 chip And3(a wire, b wire, c wire) wire {
-	return And(a, And(b, c))
+	tmp := And(a, b)
+	res := And(tmp, c)
+	return res
 }
 

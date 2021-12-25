@@ -4,8 +4,8 @@
 #include <hdlc/codegen.h>
 #include <iostream>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
-
 #include <string>
 
 int main() {
@@ -28,6 +28,10 @@ int main() {
     auto module = std::move(codegen.module);
 
     module->print(llvm::outs(), nullptr);
+
+    if (llvm::verifyModule(*module, &llvm::outs())) {
+      throw;
+    }
 
   } catch (ParserError &e) {
     std::cout << e.what() << std::endl;

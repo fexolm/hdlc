@@ -28,8 +28,7 @@ struct CodegenVisitor : ast::Visitor {
         llvm::StructType::create({llvm::Type::getInt1Ty(*ctx)}, "NandResult");
 
     auto sig = llvm::FunctionType::get(
-        out->getPointerTo(),
-        {llvm::Type::getInt1Ty(*ctx), llvm::Type::getInt1Ty(*ctx)}, false);
+        out, {llvm::Type::getInt1Ty(*ctx), llvm::Type::getInt1Ty(*ctx)}, false);
 
     auto func = llvm::Function::Create(sig, llvm::Function::ExternalLinkage,
                                        "Nand", module.get());
@@ -41,12 +40,12 @@ struct CodegenVisitor : ast::Visitor {
     auto nand = ir_builder.CreateNot(
         ir_builder.CreateAnd(func->getArg(0), func->getArg(1)));
 
-    auto res = ir_builder.CreateAlloca(out);
-    auto res_field = ir_builder.CreateStructGEP(out, res, 0);
+    llvm::Value *res = ir_builder.CreateAlloca(out);
+    res = ir_builder.CreateLoad(out, res);
 
-    ir_builder.CreateStore(nand, res_field);
+    ir_builder.CreateInsertValue(res, nand, {0});
 
-    ir_builder.CreateRet(res_field);
+    ir_builder.CreateRet(res);
   }
 
   CodegenVisitor(llvm::LLVMContext *ctx) : ctx(ctx), ir_builder(*ctx) {
@@ -76,7 +75,7 @@ struct CodegenVisitor : ast::Visitor {
 
     auto out = llvm::StructType::create(outputs);
 
-    auto sig = llvm::FunctionType::get(out->getPointerTo(), inputs, false);
+    auto sig = llvm::FunctionType::get(out, inputs, false);
 
     auto func = llvm::Function::Create(sig, llvm::Function::ExternalLinkage,
                                        chip.ident, module.get());
@@ -106,15 +105,13 @@ struct CodegenVisitor : ast::Visitor {
     auto res = results_stack.top();
     results_stack.pop();
 
-    auto ptr_type = llvm::cast<llvm::PointerType>(res->getType());
-    auto struct_type = llvm::cast<llvm::StructType>(ptr_type->getElementType());
+    auto struct_type = llvm::cast<llvm::StructType>(res->getType());
 
-    for (int i = 0; i < stmt.assignees.size(); i++) {
-      auto val = ir_builder.CreateStructGEP(struct_type, res, i,
-                                            stmt.assignees[i]->ident);
+    for (unsigned i = 0; i < stmt.assignees.size(); i++) {
+      auto val =
+          ir_builder.CreateExtractValue(res, {i}, stmt.assignees[i]->ident);
       val->setName(stmt.assignees[i]->ident);
-      symbol_table[stmt.assignees[i]->ident] =
-          ir_builder.CreateLoad(struct_type->getElementType(i), val);
+      symbol_table[stmt.assignees[i]->ident] = val;
     }
   }
 
@@ -137,21 +134,16 @@ struct CodegenVisitor : ast::Visitor {
 
   virtual void visit(ast::RetStmt &stmt) {
     auto res_type =
-        llvm::cast<llvm::PointerType>(current_function_type->getReturnType());
+        llvm::cast<llvm::StructType>(current_function_type->getReturnType());
 
-    auto struct_type = llvm::cast<llvm::StructType>(res_type->getElementType());
+    llvm::Value *res_val = ir_builder.CreateAlloca(res_type);
+    res_val = ir_builder.CreateLoad(res_type, res_val);
 
-    auto res_val = ir_builder.CreateAlloca(struct_type);
-
-    for (int i = 0; i < stmt.results.size(); i++) {
+    for (unsigned i = 0; i < stmt.results.size(); i++) {
       stmt.results[i]->visit(*this);
-      auto val = ir_builder.CreateStructGEP(struct_type, res_val, i);
-
-      auto actual_val = results_stack.top();
+      auto val = results_stack.top();
       results_stack.pop();
-
-      ir_builder.CreateStore(
-          ir_builder.CreateLoad(actual_val->getType(), actual_val), val);
+      ir_builder.CreateInsertValue(res_val, val, {i});
     }
     ir_builder.CreateRet(res_val);
   }
