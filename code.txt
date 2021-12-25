@@ -1,3 +1,5 @@
+
+
 chip And (a wire, b wire) wire {
 	tmp := Nand(a, b)
 	return Nand(tmp, tmp)
@@ -7,10 +9,3 @@ chip And3(a wire, b wire, c wire) wire {
 	return And(a, And(b, c))
 }
 
-chip TestRegs(b wire) wire {
-	reg a
-	a <- b
-	return <- a
-}
-
-chip Empty() {}
