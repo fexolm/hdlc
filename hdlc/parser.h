@@ -47,7 +47,7 @@ private:
 
   void expect_symbol_sequence(std::string_view seq);
 
-  std::shared_ptr<ast::Chip> Parser::read_chip();
+  std::shared_ptr<ast::Chip> read_chip();
 
   std::vector<std::shared_ptr<ast::Value>> read_params();
 
