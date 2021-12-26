@@ -20,8 +20,7 @@ llvm_map_components_to_libnames(llvm_libs
     Core
     ExecutionEngine
     Interpreter
-    MC
-    MCJIT
+	OrcJit
     Support
     nativecodegen
 )
