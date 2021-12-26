@@ -1,72 +1,50 @@
-#include "hdlc/codegen.h"
-#include "hdlc/jit.h"
-#include "hdlc/parser.h"
+#include "hdlc/chip.h"
+
 #include <fstream>
-#include <hdlc/codegen.h>
 #include <iostream>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <cassert>
 #include <string>
 int main() {
-  std::ifstream ifs("code.txt");
-  std::string code((std::istreambuf_iterator<char>(ifs)),
-                   (std::istreambuf_iterator<char>()));
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 
-  Parser p(code);
   try {
-    auto pkg = p.read_package("gates");
-    ast::Printer v(std::cout);
-    v.visit(*pkg);
+    Chip chip("code.txt", "And3");
 
-    auto ctx = std::make_unique<llvm::LLVMContext>();
+    assert(chip.get_num_input_slots() == 3);
+    assert(chip.get_num_output_slots() == 1);
 
-    CodegenVisitor codegen(ctx.get(), "And3");
+    auto a = chip.get_input_slot(0);
+    auto b = chip.get_input_slot(1);
+    auto c = chip.get_input_slot(2);
 
-    codegen.visit(*pkg);
+    auto res = chip.get_output_slot(0);
 
-    auto module = std::move(codegen.module);
+    a.set(false);
+    b.set(false);
+    c.set(false);
 
-    module->print(llvm::outs(), nullptr);
+    chip.run();
 
-    if (llvm::verifyModule(*module, &llvm::outs())) {
-      throw;
+    for (int i = 0; i < 2; i++) {
+      a.set(i);
+      for (int j = 0; j < 2; j++) {
+        b.set(j);
+        for (int k = 0; k < 2; k++) {
+          c.set(k);
+
+          chip.run();
+
+          std::cout << i << ", " << j << ", " << k << " =>" << res.get()
+                    << std::endl;
+        }
+      }
     }
-
-    JittedModule jmod(std::move(module), std::move(ctx));
-
-    {
-      std::vector<char> inputs{true, true, true};
-      std::vector<char> outputs{true};
-      jmod.run((bool *)inputs.data(), (bool *)outputs.data());
-      std::cout << "Result: " << (bool)outputs[0] << std::endl;
-    }
-
-    {
-      std::vector<char> inputs{true, false, true};
-      std::vector<char> outputs{false};
-      jmod.run((bool *)inputs.data(), (bool *)outputs.data());
-      std::cout << "Result: " << (bool)outputs[0] << std::endl;
-    }
-
-    {
-      std::vector<char> inputs{true, true, false};
-      std::vector<char> outputs{false};
-      jmod.run((bool *)inputs.data(), (bool *)outputs.data());
-      std::cout << "Result: " << (bool)outputs[0] << std::endl;
-    }
-
-    {
-      std::vector<char> inputs{false, true, true};
-      std::vector<char> outputs{false};
-      jmod.run((bool *)inputs.data(), (bool *)outputs.data());
-      std::cout << "Result: " << (bool)outputs[0] << std::endl;
-    }
-
   } catch (ParserError &e) {
     std::cout << e.what() << std::endl;
     throw;

@@ -71,7 +71,6 @@ struct CodegenVisitor : ast::Visitor {
       val = ir_builder.CreateLoad(f_res_struct_type->getElementType(i), val);
       val = ir_builder.CreateIntCast(val, llvm::Type::getInt8Ty(*ctx), false);
 
-      slot->getType()->print(llvm::outs());
       ir_builder.CreateStore(val, slot);
     }
 
