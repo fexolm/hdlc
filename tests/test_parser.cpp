@@ -1,8 +1,10 @@
 #include "gtest_util.h"
-#include "hdlc/parser.h"
-#include "hdlc/parser_error.h"
+#include "hdlc/ast/parser.h"
+#include "hdlc/ast/parser_error.h"
 #include "gtest/gtest.h"
 #include <sstream>
+
+using namespace hdlc;
 
 TEST(ParsePackage, CorrectInput) {
   std::string reference = R"(
@@ -50,7 +52,7 @@ return
 )";
 
   EXPECT_THROW_WITH_MESSAGE(
-      ast::parse_package(reference, "test_pkg"), ParserError,
+      ast::parse_package(reference, "test_pkg"), ast::ParserError,
       "Parser error: ident should start with letter or _ (line 3, pos 0)");
 }
 
@@ -69,7 +71,7 @@ chip And(a, b, c) res {
 })";
 
   EXPECT_THROW_WITH_MESSAGE(
-      ast::parse_package(reference, "test_pkg"), ParserError,
+      ast::parse_package(reference, "test_pkg"), ast::ParserError,
       "Parser error: chip with name And already declared (line 7, pos 0)");
 }
 
@@ -82,7 +84,7 @@ chip And (a, b) res {
 }
 })";
   EXPECT_THROW_WITH_MESSAGE(
-      ast::parse_package(reference, "test_pkg"), ParserError,
+      ast::parse_package(reference, "test_pkg"), ast::ParserError,
       "Parser error: no return statement found (line 3, pos 0)");
 }
 
@@ -96,7 +98,7 @@ chip And () res {
 }
 })";
   EXPECT_THROW_WITH_MESSAGE(
-      ast::parse_package(reference, "test_pkg"), ParserError,
+      ast::parse_package(reference, "test_pkg"), ast::ParserError,
       "Parser error: no input statements found (line 1, pos 11)");
 }
 
@@ -110,6 +112,6 @@ chip And (a, b) {
 }
 })";
   EXPECT_THROW_WITH_MESSAGE(
-      ast::parse_package(reference, "test_pkg"), ParserError,
+      ast::parse_package(reference, "test_pkg"), ast::ParserError,
       "Parser error: no output statements found (line 1, pos 17)");
 }

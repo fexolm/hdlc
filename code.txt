@@ -1,12 +1,12 @@
 
 
-chip And (a wire, b wire) wire {
+chip And (a, b) res {
 	tmp := Nand(a, b)
 	res := Nand(tmp, tmp)
 	return res
 }
 
-chip And3(a wire, b wire, c wire) wire {
+chip And3(a, b, c) res {
 	tmp := And(a, b)
 	res := And(tmp, c)
 	return res

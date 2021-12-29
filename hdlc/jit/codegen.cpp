@@ -1,6 +1,6 @@
-#pragma once
+#include "codegen.h"
 
-#include "hdlc/ast.h"
+#include "hdlc/ast/ast.h"
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
@@ -10,7 +10,7 @@
 #include <memory>
 #include <stack>
 #include <unordered_map>
-
+namespace hdlc::jit {
 struct CodegenVisitor : ast::Visitor {
   llvm::LLVMContext *ctx;
   llvm::IRBuilder<> ir_builder;
@@ -224,3 +224,12 @@ struct CodegenVisitor : ast::Visitor {
   virtual void visit(ast::RegWrite &rw) {}
   virtual void visit(ast::RegRead &rr) {}
 };
+
+std::unique_ptr<llvm::Module>
+transform_pkg_to_llvm(llvm::LLVMContext *ctx, std::shared_ptr<ast::Package> pkg,
+                      std::string entrypoint) {
+  CodegenVisitor v(ctx, entrypoint);
+  v.visit(*pkg);
+  return std::move(v.module);
+}
+} // namespace hdlc::jit

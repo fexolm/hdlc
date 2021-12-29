@@ -1,3 +1,4 @@
+#include "hdlc/ast/parser_error.h"
 #include "hdlc/chip.h"
 
 #include <fstream>
@@ -14,7 +15,7 @@ int main() {
   llvm::InitializeNativeTargetAsmPrinter();
 
   try {
-    Chip chip("code.txt", "And3");
+    hdlc::Chip chip("code.txt", "And3");
 
     assert(chip.get_num_input_slots() == 3);
     assert(chip.get_num_output_slots() == 1);
@@ -45,7 +46,7 @@ int main() {
         }
       }
     }
-  } catch (ParserError &e) {
+  } catch (hdlc::ast::ParserError &e) {
     std::cout << e.what() << std::endl;
     throw;
   }

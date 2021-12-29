@@ -1,6 +1,8 @@
 #include "parser.h"
 
-using SymbolMap = std::unordered_map<std::string, std::shared_ptr<ast::Value>>;
+namespace hdlc::ast {
+
+using SymbolMap = std::unordered_map<std::string, std::shared_ptr<Value>>;
 
 class Parser {
 private:
@@ -15,8 +17,8 @@ public:
   explicit Parser(std::string data)
       : data(std::move(data)), pos(0), line(0), line_pos(0) {}
 
-  std::shared_ptr<ast::Package> read_package(std::string name) {
-    auto res = std::make_shared<ast::Package>();
+  std::shared_ptr<Package> read_package(std::string name) {
+    auto res = std::make_shared<Package>();
     res->name = name;
     skip_spaces();
 
@@ -132,7 +134,7 @@ private:
     }
   }
 
-  std::shared_ptr<ast::Chip> read_chip() {
+  std::shared_ptr<Chip> read_chip() {
     expect_symbol_sequence("chip"); // TODO: check space
     skip_spaces();
 
@@ -162,7 +164,7 @@ private:
 
     auto body = read_chip_body(local_vars);
 
-    auto chip = std::make_shared<ast::Chip>();
+    auto chip = std::make_shared<Chip>();
     chip->ident = name;
     chip->inputs = params;
     chip->outputs = results;
@@ -171,8 +173,8 @@ private:
     return chip;
   }
 
-  std::vector<std::shared_ptr<ast::Value>> read_params() {
-    std::vector<std::shared_ptr<ast::Value>> res;
+  std::vector<std::shared_ptr<Value>> read_params() {
+    std::vector<std::shared_ptr<Value>> res;
     if (peek_symbol() == ')') {
       return res;
     }
@@ -190,17 +192,17 @@ private:
     return res;
   }
 
-  std::shared_ptr<ast::Value> read_value() {
+  std::shared_ptr<Value> read_value() {
     std::string name(read_ident());
     skip_spaces();
 
-    auto res = std::make_shared<ast::Value>(name, ast::Type::WIRE);
+    auto res = std::make_shared<Value>(name, Type::WIRE);
 
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Value>> read_return_types() {
-    std::vector<std::shared_ptr<ast::Value>> res;
+  std::vector<std::shared_ptr<Value>> read_return_types() {
+    std::vector<std::shared_ptr<Value>> res;
 
     if (peek_symbol() == '{') {
       return res;
@@ -208,7 +210,7 @@ private:
 
     while (true) {
       std::string name(read_ident());
-      res.push_back(std::make_shared<ast::Value>(name, ast::Type::WIRE));
+      res.push_back(std::make_shared<Value>(name, Type::WIRE));
       skip_spaces();
       if (peek_symbol() == ',') {
         read_symbol();
@@ -221,9 +223,8 @@ private:
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Stmt>>
-  read_chip_body(SymbolMap &symbol_map) {
-    std::vector<std::shared_ptr<ast::Stmt>> res;
+  std::vector<std::shared_ptr<Stmt>> read_chip_body(SymbolMap &symbol_map) {
+    std::vector<std::shared_ptr<Stmt>> res;
 
     expect_symbol_sequence("{");
     skip_spaces();
@@ -239,7 +240,7 @@ private:
     return res;
   }
 
-  std::shared_ptr<ast::Stmt> read_stmt(SymbolMap &symbol_map) {
+  std::shared_ptr<Stmt> read_stmt(SymbolMap &symbol_map) {
     auto w = peek_string();
 
     if (w == "return") {
@@ -259,7 +260,7 @@ private:
     }
   }
 
-  std::shared_ptr<ast::RegWrite> read_reg_write(SymbolMap &symbol_map) {
+  std::shared_ptr<RegWrite> read_reg_write(SymbolMap &symbol_map) {
     std::string reg_name(read_ident());
 
     if (!symbol_map.count(reg_name)) {
@@ -272,10 +273,10 @@ private:
     expect_symbol_sequence("<-");
     skip_spaces();
     auto rhs = read_expr(symbol_map);
-    return std::make_shared<ast::RegWrite>(reg, rhs);
+    return std::make_shared<RegWrite>(reg, rhs);
   }
 
-  std::shared_ptr<ast::RegInit> read_reg_init(SymbolMap &symbol_map) {
+  std::shared_ptr<RegInit> read_reg_init(SymbolMap &symbol_map) {
     expect_symbol_sequence("reg");
     skip_spaces();
     std::string name(read_ident());
@@ -283,21 +284,21 @@ private:
       throw ParserError("Creating register with existing name", line, line_pos);
     }
 
-    symbol_map[name] = std::make_shared<ast::Value>(name, ast::Type::REGISTER);
-    return std::make_shared<ast::RegInit>(symbol_map[name]);
+    symbol_map[name] = std::make_shared<Value>(name, Type::REGISTER);
+    return std::make_shared<RegInit>(symbol_map[name]);
   }
 
-  std::shared_ptr<ast::RetStmt> read_ret_stmt(SymbolMap &symbol_map) {
+  std::shared_ptr<RetStmt> read_ret_stmt(SymbolMap &symbol_map) {
     expect_symbol_sequence("return");
     skip_spaces();
 
-    auto res = std::make_shared<ast::RetStmt>();
+    auto res = std::make_shared<RetStmt>();
     res->results = read_expr_list(symbol_map);
     return res;
   }
 
-  std::shared_ptr<ast::AssignStmt> read_assign_stmt(SymbolMap &symbol_map) {
-    auto res = std::make_shared<ast::AssignStmt>();
+  std::shared_ptr<AssignStmt> read_assign_stmt(SymbolMap &symbol_map) {
+    auto res = std::make_shared<AssignStmt>();
     res->assignees = read_ident_list(symbol_map);
     skip_spaces();
     expect_symbol_sequence(":=");
@@ -306,7 +307,7 @@ private:
     return res;
   }
 
-  std::shared_ptr<ast::Expr> read_expr(SymbolMap &symbol_map) {
+  std::shared_ptr<Expr> read_expr(SymbolMap &symbol_map) {
     if (peek_symbol() == '<') {
       return read_reg_read(symbol_map);
     }
@@ -319,7 +320,7 @@ private:
       auto params = read_expr_list(symbol_map);
       skip_spaces();
       expect_symbol_sequence(")");
-      return std::make_shared<ast::CallExpr>(ident, params);
+      return std::make_shared<CallExpr>(ident, params);
     }
 
     if (!symbol_map.count(ident)) {
@@ -328,7 +329,7 @@ private:
     return symbol_map[ident];
   }
 
-  std::shared_ptr<ast::RegRead> read_reg_read(SymbolMap &symbol_map) {
+  std::shared_ptr<RegRead> read_reg_read(SymbolMap &symbol_map) {
     expect_symbol_sequence("<-");
     skip_spaces();
     std::string ident(read_ident());
@@ -337,12 +338,11 @@ private:
       throw ParserError("Referenced variable not initialized", line, line_pos);
     }
 
-    return std::make_shared<ast::RegRead>(symbol_map[ident]);
+    return std::make_shared<RegRead>(symbol_map[ident]);
   }
 
-  std::vector<std::shared_ptr<ast::Expr>>
-  read_expr_list(SymbolMap &symbol_map) {
-    std::vector<std::shared_ptr<ast::Expr>> res;
+  std::vector<std::shared_ptr<Expr>> read_expr_list(SymbolMap &symbol_map) {
+    std::vector<std::shared_ptr<Expr>> res;
 
     while (true) {
       res.push_back(read_expr(symbol_map));
@@ -358,13 +358,11 @@ private:
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Value>>
-  read_ident_list(SymbolMap &symbol_map) {
-    std::vector<std::shared_ptr<ast::Value>> res;
+  std::vector<std::shared_ptr<Value>> read_ident_list(SymbolMap &symbol_map) {
+    std::vector<std::shared_ptr<Value>> res;
 
     while (true) {
-      auto val = std::make_shared<ast::Value>(std::string(read_ident()),
-                                              ast::Type::WIRE);
+      auto val = std::make_shared<Value>(std::string(read_ident()), Type::WIRE);
 
       if (symbol_map.count(val->ident)) {
         throw ParserError("Multiple assign to local variable", line, line_pos);
@@ -385,9 +383,10 @@ private:
     return res;
   }
 };
-
-std::shared_ptr<ast::Package> ast::parse_package(const std::string &data,
-                                                 const std::string &name) {
+std::shared_ptr<Package> parse_package(const std::string &data,
+                                       const std::string &name) {
   Parser parser(data);
   return parser.read_package(name);
 }
+
+} // namespace hdlc::ast

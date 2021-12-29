@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace ast {
+namespace hdlc::ast {
 
 struct Chip;
 struct ChipSignature;
@@ -194,4 +194,4 @@ struct Printer : Visitor {
     rr.reg->visit(*this);
   }
 };
-} // namespace ast
+} // namespace hdlc::ast

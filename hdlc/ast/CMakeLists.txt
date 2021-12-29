@@ -1,0 +1,1 @@
+add_library(ast parser.cpp parser_error.cpp)

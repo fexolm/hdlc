@@ -1,70 +1,43 @@
 #pragma once
-#include "hdlc/ast.h"
-#include "hdlc/codegen.h"
-#include "hdlc/jit.h"
-#include "hdlc/parser.h"
 
-#include <fstream>
-#include <llvm/IR/LLVMContext.h>
+#include "jit/module.h"
+#include <memory>
 #include <string>
+#include <vector>
 
+namespace hdlc {
 class Slot {
 private:
   bool *ptr;
 
 public:
-  explicit Slot(bool *ptr) : ptr(ptr) {}
+  explicit Slot(bool *ptr);
 
   Slot(const Slot &) = delete;
 
-  void set(bool val) { *ptr = val; }
+  void set(bool val);
 
-  bool get() const { return *ptr; }
+  bool get() const;
 };
 
 class Chip {
 private:
-  std::unique_ptr<JittedModule> jit;
+  std::unique_ptr<jit::Module> module;
 
   std::vector<char> inputs;
   std::vector<char> outputs;
 
 public:
-  explicit Chip(const std::string &path, const std::string &chip_name) {
-    std::ifstream ifs(path);
-    std::string code((std::istreambuf_iterator<char>(ifs)),
-                     (std::istreambuf_iterator<char>()));
+  explicit Chip(const std::string &path, const std::string &chip_name);
 
-    auto pkg = ast::parse_package(code, "gates");
+  size_t get_num_input_slots();
 
-    auto ctx = std::make_unique<llvm::LLVMContext>();
-    CodegenVisitor codegen(ctx.get(), chip_name);
-    codegen.visit(*pkg);
+  size_t get_num_output_slots();
 
-    jit = std::make_unique<JittedModule>(std::move(codegen.module),
-                                         std::move(ctx));
+  Slot get_input_slot(size_t i);
 
-    auto requested_chip_iter =
-        std::find_if(pkg->chips.begin(), pkg->chips.end(),
-                     [&chip_name](auto &c) { return c->ident == chip_name; });
+  const Slot get_output_slot(size_t i);
 
-    if (requested_chip_iter == pkg->chips.end()) {
-      throw;
-    }
-
-    auto requested_chip = *requested_chip_iter;
-
-    inputs.resize(requested_chip->inputs.size());
-    outputs.resize(requested_chip->outputs.size());
-  }
-
-  size_t get_num_input_slots() { return inputs.size(); }
-
-  size_t get_num_output_slots() { return outputs.size(); }
-
-  Slot get_input_slot(size_t i) { return Slot((bool *)&inputs[i]); }
-
-  const Slot get_output_slot(size_t i) { return Slot((bool *)&outputs[i]); }
-
-  void run() { jit->run((bool *)inputs.data(), (bool *)outputs.data()); }
+  void run();
 };
+} // namespace hdlc

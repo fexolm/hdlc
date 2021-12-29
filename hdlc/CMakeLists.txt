@@ -1,2 +1,5 @@
-add_library(hdlc parser.cpp parser_error.cpp)
-target_link_libraries(hdlc ${llvm_libs})
+add_subdirectory(ast)
+add_subdirectory(jit)
+
+add_library(hdlc chip.cpp)
+target_link_libraries(hdlc ast jit)

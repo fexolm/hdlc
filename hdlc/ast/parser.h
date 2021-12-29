@@ -9,7 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace ast {
-std::shared_ptr<ast::Package> parse_package(const std::string &data,
-                                            const std::string &name);
+namespace hdlc::ast {
+std::shared_ptr<Package> parse_package(const std::string &data,
+                                       const std::string &name);
 }
