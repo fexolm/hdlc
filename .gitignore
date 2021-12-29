@@ -2,3 +2,4 @@ build
 deps
 .vscode
 compile_commands.json
+.devcontainer
