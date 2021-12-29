@@ -12,7 +12,7 @@ private:
   std::vector<size_t> line_length;
 
 public:
-  explicit Parser(std::string data) : data(std::move(data)), pos(0) {}
+  explicit Parser(std::string data) : data(std::move(data)), pos(0), line(0), line_pos(0) {}
 
   std::shared_ptr<ast::Package> read_package(std::string name) {
     auto res = std::make_shared<ast::Package>();
