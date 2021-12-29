@@ -12,7 +12,8 @@ private:
   std::vector<size_t> line_length;
 
 public:
-  explicit Parser(std::string data) : data(std::move(data)), pos(0), line(0), line_pos(0) {}
+  explicit Parser(std::string data)
+      : data(std::move(data)), pos(0), line(0), line_pos(0) {}
 
   std::shared_ptr<ast::Package> read_package(std::string name) {
     auto res = std::make_shared<ast::Package>();
@@ -20,7 +21,19 @@ public:
     skip_spaces();
 
     while (peek_symbol() != -1) {
+
+      auto cur_line = line;
+      auto cur_line_pos = line_pos;
+
       auto chip = read_chip();
+
+      if (std::any_of(
+              res->chips.begin(), res->chips.end(),
+              [&chip](auto r_chip) { return chip->ident == r_chip->ident; })) {
+        throw ParserError("chip with name " + chip->ident + " already declared",
+                          cur_line, cur_line_pos);
+      }
+
       res->chips.push_back(chip);
       skip_spaces();
     }
@@ -29,7 +42,6 @@ public:
   }
 
 private:
-  
   char read_symbol() {
     if (pos < data.size()) {
       auto sym = data[pos];
@@ -179,27 +191,24 @@ private:
   }
 
   std::shared_ptr<ast::Value> read_value() {
-    auto name = read_ident();
+    std::string name(read_ident());
     skip_spaces();
-    std::string type(read_ident());
 
-    auto res = std::make_shared<ast::Value>();
-    res->ident = name;
-    res->type = std::make_shared<ast::Type>(type);
+    auto res = std::make_shared<ast::Value>(name, ast::Type::WIRE);
 
     return res;
   }
 
-  std::vector<std::shared_ptr<ast::Type>> read_return_types() {
-    std::vector<std::shared_ptr<ast::Type>> res;
+  std::vector<std::shared_ptr<ast::Value>> read_return_types() {
+    std::vector<std::shared_ptr<ast::Value>> res;
 
     if (peek_symbol() == '{') {
       return res;
     }
 
     while (true) {
-      std::string type(read_string());
-      res.push_back(std::make_shared<ast::Type>(type));
+      std::string name(read_ident());
+      res.push_back(std::make_shared<ast::Value>(name, ast::Type::WIRE));
       skip_spaces();
       if (peek_symbol() == ',') {
         read_symbol();
@@ -274,7 +283,7 @@ private:
       throw ParserError("Creating register with existing name", line, line_pos);
     }
 
-    symbol_map[name] = std::make_shared<ast::Value>(name, nullptr);
+    symbol_map[name] = std::make_shared<ast::Value>(name, ast::Type::REGISTER);
     return std::make_shared<ast::RegInit>(symbol_map[name]);
   }
 
@@ -354,8 +363,8 @@ private:
     std::vector<std::shared_ptr<ast::Value>> res;
 
     while (true) {
-      auto val =
-          std::make_shared<ast::Value>(std::string(read_ident()), nullptr);
+      auto val = std::make_shared<ast::Value>(std::string(read_ident()),
+                                              ast::Type::WIRE);
 
       if (symbol_map.count(val->ident)) {
         throw ParserError("Multiple assign to local variable", line, line_pos);

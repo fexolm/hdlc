@@ -111,7 +111,7 @@ struct CodegenVisitor : ast::Visitor {
     initialize_prebuilt_chips();
   }
 
-  llvm::Type *get_llvm_type(const ast::Type &t) {
+  llvm::Type *get_llvm_type(const ast::Type t) {
     return llvm::Type::getInt1Ty(*ctx);
   }
 
@@ -126,10 +126,10 @@ struct CodegenVisitor : ast::Visitor {
     llvm::SmallVector<llvm::Type *> outputs;
 
     for (auto &i : chip.inputs) {
-      args.push_back(get_llvm_type(*i->type));
+      args.push_back(get_llvm_type(i->type));
     }
     for (auto &o : chip.outputs) {
-      outputs.push_back(get_llvm_type(*o));
+      outputs.push_back(get_llvm_type(o->type));
     }
 
     auto out = llvm::StructType::create(outputs);
@@ -224,4 +224,3 @@ struct CodegenVisitor : ast::Visitor {
   virtual void visit(ast::RegWrite &rw) {}
   virtual void visit(ast::RegRead &rr) {}
 };
-
