@@ -35,8 +35,7 @@ public:
     std::string code((std::istreambuf_iterator<char>(ifs)),
                      (std::istreambuf_iterator<char>()));
 
-    Parser p(code);
-    auto pkg = p.read_package("gates");
+    auto pkg = ast::parse_package(code, "gates");
 
     auto ctx = std::make_unique<llvm::LLVMContext>();
     CodegenVisitor codegen(ctx.get(), chip_name);
