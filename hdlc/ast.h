@@ -14,7 +14,6 @@ struct ChipBody;
 struct Stmt;
 struct Expr;
 struct Value;
-struct Type;
 struct Visitor;
 struct Package;
 struct AssignStmt;
@@ -50,17 +49,13 @@ struct Package : Node {
 struct Chip : Node {
   std::string ident;
   std::vector<std::shared_ptr<Value>> inputs;
-  std::vector<std::shared_ptr<Type>> outputs;
+  std::vector<std::shared_ptr<Value>> outputs;
   std::vector<std::shared_ptr<Stmt>> body;
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
 
-struct Type {
-  std::string name;
-
-  explicit Type(const std::string &name) : name(name) {}
-};
+enum class Type { WIRE, REGISTER };
 
 struct Stmt : Node {};
 
@@ -85,12 +80,9 @@ struct CallExpr : Expr {
 
 struct Value : Expr {
   std::string ident;
-  std::shared_ptr<Type> type;
+  Type type;
 
-  Value(std::string name, std::shared_ptr<Type> type)
-      : ident(name), type(type) {}
-
-  Value() {}
+  Value(std::string name, Type type) : ident(name), type(type) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
@@ -146,7 +138,7 @@ struct Printer : Visitor {
     out << ") ";
 
     for (auto &o : chip.outputs) {
-      out << o->name << ", ";
+      out << o->ident << ", ";
     }
     out << "{" << std::endl;
 

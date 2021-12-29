@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "parser_error.h"
+#include <algorithm>
 #include <memory>
 #include <sstream>
 #include <string>
