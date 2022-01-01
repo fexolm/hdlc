@@ -253,7 +253,6 @@ struct CodegenVisitor : ast::Visitor {
     ir_builder.CreateRetVoid();
   }
 
-  virtual void visit(ast::RegInit &reg) {}
   virtual void visit(ast::RegWrite &rw) {}
   virtual void visit(ast::RegRead &rr) {}
 };

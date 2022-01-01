@@ -13,6 +13,8 @@ private:
 
   std::vector<size_t> line_length;
 
+  std::unordered_map<std::string, std::shared_ptr<Chip>> chips;
+
 public:
   explicit Parser(std::string data)
       : data(std::move(data)), pos(0), line(0), line_pos(0) {}
@@ -20,23 +22,31 @@ public:
   std::shared_ptr<Package> read_package(std::string name) {
     auto res = std::make_shared<Package>();
     res->name = name;
+    {
+      auto out_types =
+          std::vector<std::shared_ptr<Type>>{std::make_shared<WireType>()};
+      auto out_names = std::vector<std::string>{std::string("res")};
+      chips["Nand"] = std::make_shared<Chip>(
+          "Nand",
+          std::vector<std::shared_ptr<Value>>{}, // TODO: fill params vector
+          std::make_shared<TupleType>(out_types, out_names));
+    }
+
     skip_spaces();
 
     while (peek_symbol() != -1) {
-
       auto cur_line = line;
       auto cur_line_pos = line_pos;
 
       auto chip = read_chip();
 
-      if (std::any_of(
-              res->chips.begin(), res->chips.end(),
-              [&chip](auto r_chip) { return chip->ident == r_chip->ident; })) {
+      if (chips.count(chip->ident)) {
         throw ParserError("chip with name " + chip->ident + " already declared",
                           cur_line, cur_line_pos);
       }
 
       res->chips.push_back(chip);
+      chips[chip->ident] = chip;
       skip_spaces();
     }
 
@@ -179,7 +189,7 @@ private:
       return res;
     }
     while (true) {
-      auto val = read_value();
+      auto val = read_param();
       res.push_back(val);
       skip_spaces();
       if (peek_symbol() == ',') {
@@ -192,7 +202,7 @@ private:
     return res;
   }
 
-  std::shared_ptr<Value> read_value() {
+  std::shared_ptr<Value> read_param() {
     std::string name(read_ident());
     skip_spaces();
 
@@ -251,8 +261,6 @@ private:
 
     if (w == "return") {
       return read_ret_stmt(symbol_map);
-    } else if (w == "reg") {
-      return read_reg_init(symbol_map);
     } else {
 
       // TODO: add regWriteStmt support
@@ -282,19 +290,6 @@ private:
     return std::make_shared<RegWrite>(reg, rhs);
   }
 
-  std::shared_ptr<RegInit> read_reg_init(SymbolMap &symbol_map) {
-    expect_symbol_sequence("reg");
-    skip_spaces();
-    std::string name(read_ident());
-    if (symbol_map.count(name)) {
-      throw ParserError("Creating register with existing name", line, line_pos);
-    }
-
-    symbol_map[name] =
-        std::make_shared<Value>(name, std::make_shared<RegisterType>());
-    return std::make_shared<RegInit>(symbol_map[name]);
-  }
-
   std::shared_ptr<RetStmt> read_ret_stmt(SymbolMap &symbol_map) {
     expect_symbol_sequence("return");
     skip_spaces();
@@ -306,11 +301,12 @@ private:
 
   std::shared_ptr<AssignStmt> read_assign_stmt(SymbolMap &symbol_map) {
     auto res = std::make_shared<AssignStmt>();
-    res->assignees = read_ident_list(symbol_map);
+    res->assignees = read_variable_list(symbol_map);
     skip_spaces();
     expect_symbol_sequence(":=");
     skip_spaces();
     res->rhs = read_expr(symbol_map);
+
     return res;
   }
 
@@ -327,7 +323,8 @@ private:
       auto params = read_expr_list(symbol_map);
       skip_spaces();
       expect_symbol_sequence(")");
-      return std::make_shared<CallExpr>(ident, params);
+      return std::make_shared<CallExpr>(ident, params,
+                                        chips[ident]->output_type);
     }
 
     if (!symbol_map.count(ident)) {
@@ -365,7 +362,8 @@ private:
     return res;
   }
 
-  std::vector<std::shared_ptr<Value>> read_ident_list(SymbolMap &symbol_map) {
+  std::vector<std::shared_ptr<Value>>
+  read_variable_list(SymbolMap &symbol_map) {
     std::vector<std::shared_ptr<Value>> res;
 
     while (true) {

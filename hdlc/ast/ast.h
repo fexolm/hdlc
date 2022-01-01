@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -19,7 +20,6 @@ struct Package;
 struct AssignStmt;
 struct CallExpr;
 struct RetStmt;
-struct RegInit;
 struct RegWrite;
 struct RegRead;
 
@@ -39,7 +39,6 @@ struct Visitor {
   virtual void visit(CallExpr &expr) = 0;
   virtual void visit(Value &val) = 0;
   virtual void visit(RetStmt &stmt) = 0;
-  virtual void visit(RegInit &reg) = 0;
   virtual void visit(RegWrite &rw) = 0;
   virtual void visit(RegRead &rr) = 0;
 };
@@ -63,6 +62,12 @@ struct Chip : Node {
   std::vector<std::shared_ptr<Value>> inputs;
   std::shared_ptr<TupleType> output_type;
   std::vector<std::shared_ptr<Stmt>> body;
+
+  Chip() {}
+
+  Chip(std::string ident, std::vector<std::shared_ptr<Value>> inputs,
+       std::shared_ptr<TupleType> output_type)
+      : ident(ident), inputs(inputs), output_type(output_type) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
@@ -92,8 +97,8 @@ struct SliceType : Type {
 struct TupleType : Type {
   std::vector<std::shared_ptr<Type>> element_types;
   std::vector<std::string> element_names;
-  explicit TupleType(std::vector<std::shared_ptr<Type>> types,
-                     std::vector<std::string> names)
+  TupleType(std::vector<std::shared_ptr<Type>> types,
+            std::vector<std::string> names)
       : element_types(std::move(types)), element_names(std::move(names)) {}
   virtual void visit(TypeVisitor &v) { v.visit(*this); }
 };
@@ -107,16 +112,22 @@ struct AssignStmt : Stmt {
   void visit(Visitor &v) override { v.visit(*this); }
 };
 
-struct Expr : Node {};
+struct Expr : Node {
+  virtual std::shared_ptr<Type> result_type() = 0;
+};
 
 struct CallExpr : Expr {
   std::string chip_name;
   std::vector<std::shared_ptr<Expr>> args;
+  std::shared_ptr<Type> res_type;
 
-  CallExpr(std::string name, std::vector<std::shared_ptr<Expr>> args)
-      : chip_name(name), args(args) {}
+  CallExpr(std::string name, std::vector<std::shared_ptr<Expr>> args,
+           std::shared_ptr<Type> res_type)
+      : chip_name(name), args(args), res_type(res_type) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
+
+  virtual std::shared_ptr<Type> result_type() { return res_type; }
 };
 
 struct Value : Expr {
@@ -127,18 +138,12 @@ struct Value : Expr {
       : ident(name), type(type) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
+
+  virtual std::shared_ptr<Type> result_type() { return type; }
 };
 
 struct RetStmt : Stmt {
   std::vector<std::shared_ptr<Expr>> results;
-
-  void visit(Visitor &v) override { v.visit(*this); }
-};
-
-struct RegInit : Stmt {
-  std::shared_ptr<Value> reg;
-
-  explicit RegInit(std::shared_ptr<Value> reg) : reg(reg) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
@@ -159,6 +164,11 @@ struct RegRead : Expr {
   explicit RegRead(std::shared_ptr<Value> reg) : reg(reg) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
+
+  virtual std::shared_ptr<Type> result_type() {
+    assert(false);
+    return nullptr;
+  }
 };
 
 struct Printer : Visitor {
@@ -217,11 +227,6 @@ struct Printer : Visitor {
       v->visit(*this);
       out << ", ";
     }
-  }
-
-  void visit(RegInit &init) {
-    out << "    reg ";
-    init.reg->visit(*this);
   }
 
   void visit(RegWrite &rw) {
