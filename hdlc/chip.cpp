@@ -37,7 +37,7 @@ Chip::Chip(const std::string &path, const std::string &chip_name) {
   auto requested_chip = *requested_chip_iter;
 
   inputs.resize(requested_chip->inputs.size());
-  outputs.resize(requested_chip->outputs.size());
+  outputs.resize(requested_chip->output_type->element_types.size());
 }
 
 size_t Chip::get_num_input_slots() { return inputs.size(); }

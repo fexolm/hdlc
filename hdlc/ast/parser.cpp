@@ -158,7 +158,7 @@ private:
 
     skip_spaces();
 
-    auto results = read_return_types();
+    auto result = read_result_type();
 
     skip_spaces();
 
@@ -167,7 +167,7 @@ private:
     auto chip = std::make_shared<Chip>();
     chip->ident = name;
     chip->inputs = params;
-    chip->outputs = results;
+    chip->output_type = result;
     chip->body = body;
 
     return chip;
@@ -196,21 +196,26 @@ private:
     std::string name(read_ident());
     skip_spaces();
 
-    auto res = std::make_shared<Value>(name, Type::WIRE);
+    auto res = std::make_shared<Value>(name, std::make_shared<WireType>());
 
     return res;
   }
 
-  std::vector<std::shared_ptr<Value>> read_return_types() {
-    std::vector<std::shared_ptr<Value>> res;
+  std::shared_ptr<ast::TupleType> read_result_type() {
+    std::vector<std::shared_ptr<ast::Type>> res_types;
+    std::vector<std::string> res_names;
 
     if (peek_symbol() == '{') {
-      return res;
+      throw ParserError("chip must have output wires", line, line_pos);
     }
 
     while (true) {
       std::string name(read_ident());
-      res.push_back(std::make_shared<Value>(name, Type::WIRE));
+      auto type = std::make_shared<WireType>();
+
+      res_types.push_back(type);
+      res_names.push_back(name);
+
       skip_spaces();
       if (peek_symbol() == ',') {
         read_symbol();
@@ -220,7 +225,8 @@ private:
       }
     }
 
-    return res;
+    return std::make_shared<ast::TupleType>(std::move(res_types),
+                                            std::move(res_names));
   }
 
   std::vector<std::shared_ptr<Stmt>> read_chip_body(SymbolMap &symbol_map) {
@@ -284,7 +290,8 @@ private:
       throw ParserError("Creating register with existing name", line, line_pos);
     }
 
-    symbol_map[name] = std::make_shared<Value>(name, Type::REGISTER);
+    symbol_map[name] =
+        std::make_shared<Value>(name, std::make_shared<RegisterType>());
     return std::make_shared<RegInit>(symbol_map[name]);
   }
 
@@ -362,7 +369,8 @@ private:
     std::vector<std::shared_ptr<Value>> res;
 
     while (true) {
-      auto val = std::make_shared<Value>(std::string(read_ident()), Type::WIRE);
+      auto val = std::make_shared<Value>(std::string(read_ident()),
+                                         std::make_shared<WireType>());
 
       if (symbol_map.count(val->ident)) {
         throw ParserError("Multiple assign to local variable", line, line_pos);

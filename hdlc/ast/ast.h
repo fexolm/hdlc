@@ -23,6 +23,11 @@ struct RegInit;
 struct RegWrite;
 struct RegRead;
 
+struct WireType;
+struct RegisterType;
+struct SliceType;
+struct TupleType;
+
 struct Node {
   virtual void visit(Visitor &v) = 0;
 };
@@ -39,6 +44,13 @@ struct Visitor {
   virtual void visit(RegRead &rr) = 0;
 };
 
+struct TypeVisitor {
+  virtual void visit(WireType &) = 0;
+  virtual void visit(RegisterType &) = 0;
+  virtual void visit(SliceType &) = 0;
+  virtual void visit(TupleType &) = 0;
+};
+
 struct Package : Node {
   std::string name;
   std::vector<std::shared_ptr<Chip>> chips;
@@ -49,13 +61,42 @@ struct Package : Node {
 struct Chip : Node {
   std::string ident;
   std::vector<std::shared_ptr<Value>> inputs;
-  std::vector<std::shared_ptr<Value>> outputs;
+  std::shared_ptr<TupleType> output_type;
   std::vector<std::shared_ptr<Stmt>> body;
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
 
-enum class Type { WIRE, REGISTER };
+struct Type {
+  virtual void visit(TypeVisitor &v) = 0;
+};
+
+struct WireType : Type {
+  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+};
+
+struct RegisterType : Type {
+  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+};
+
+struct SliceType : Type {
+  std::shared_ptr<Type> element_type;
+  size_t size;
+
+  SliceType(std::shared_ptr<Type> element_type, size_t size)
+      : element_type(element_type), size(size) {}
+
+  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+};
+
+struct TupleType : Type {
+  std::vector<std::shared_ptr<Type>> element_types;
+  std::vector<std::string> element_names;
+  explicit TupleType(std::vector<std::shared_ptr<Type>> types,
+                     std::vector<std::string> names)
+      : element_types(std::move(types)), element_names(std::move(names)) {}
+  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+};
 
 struct Stmt : Node {};
 
@@ -80,9 +121,10 @@ struct CallExpr : Expr {
 
 struct Value : Expr {
   std::string ident;
-  Type type;
+  std::shared_ptr<Type> type;
 
-  Value(std::string name, Type type) : ident(name), type(type) {}
+  Value(std::string name, std::shared_ptr<Type> type)
+      : ident(name), type(type) {}
 
   void visit(Visitor &v) override { v.visit(*this); }
 };
@@ -137,8 +179,8 @@ struct Printer : Visitor {
     }
     out << ") ";
 
-    for (auto &o : chip.outputs) {
-      out << o->ident << ", ";
+    for (auto &name : chip.output_type->element_names) {
+      out << name << ", ";
     }
     out << "{" << std::endl;
 

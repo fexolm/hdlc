@@ -11,6 +11,40 @@
 #include <stack>
 #include <unordered_map>
 namespace hdlc::jit {
+
+struct TypeTransformVisitor : ast::TypeVisitor {
+private:
+  std::stack<llvm::Type *> results_stack;
+  llvm::LLVMContext *ctx;
+
+public:
+  explicit TypeTransformVisitor(llvm::LLVMContext *ctx) : ctx(ctx) {}
+
+  virtual void visit(ast::WireType &wire) {
+    results_stack.push(llvm::Type::getInt1Ty(*ctx));
+  }
+
+  virtual void visit(ast::RegisterType &reg) { assert(false); }
+  virtual void visit(ast::SliceType &slice) { assert(false); }
+  virtual void visit(ast::TupleType &tuple) {
+    llvm::SmallVector<llvm::Type *> field_types;
+
+    for (auto &t : tuple.element_types) {
+      t->visit(*this);
+      field_types.push_back(results_stack.top());
+      results_stack.pop();
+    }
+
+    results_stack.push(llvm::StructType::create(field_types));
+  }
+
+  llvm::Type *get_type() {
+    auto res = results_stack.top();
+    results_stack.pop();
+    return res;
+  }
+};
+
 struct CodegenVisitor : ast::Visitor {
   llvm::LLVMContext *ctx;
   llvm::IRBuilder<> ir_builder;
@@ -111,8 +145,10 @@ struct CodegenVisitor : ast::Visitor {
     initialize_prebuilt_chips();
   }
 
-  llvm::Type *get_llvm_type(const ast::Type t) {
-    return llvm::Type::getInt1Ty(*ctx);
+  llvm::Type *get_llvm_type(ast::Type &t) {
+    TypeTransformVisitor v(ctx);
+    t.visit(v);
+    return v.get_type();
   }
 
   virtual void visit(ast::Package &pkg) {
@@ -126,13 +162,10 @@ struct CodegenVisitor : ast::Visitor {
     llvm::SmallVector<llvm::Type *> outputs;
 
     for (auto &i : chip.inputs) {
-      args.push_back(get_llvm_type(i->type));
-    }
-    for (auto &o : chip.outputs) {
-      outputs.push_back(get_llvm_type(o->type));
+      args.push_back(get_llvm_type(*i->type));
     }
 
-    auto out = llvm::StructType::create(outputs);
+    auto out = get_llvm_type(*chip.output_type);
 
     args.insert(args.begin(), out->getPointerTo());
 
