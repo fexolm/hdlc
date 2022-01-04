@@ -14,11 +14,7 @@ void Slot::set(bool val) { *ptr = val; }
 
 bool Slot::get() const { return *ptr; }
 
-Chip::Chip(const std::string &path, const std::string &chip_name) {
-  std::ifstream ifs(path);
-  std::string code((std::istreambuf_iterator<char>(ifs)),
-                   (std::istreambuf_iterator<char>()));
-
+Chip::Chip(const std::string &code, const std::string &chip_name) {
   auto pkg = ast::parse_package(code, "gates");
 
   auto ctx = std::make_unique<llvm::LLVMContext>();

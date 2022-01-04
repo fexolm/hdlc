@@ -28,7 +28,7 @@ private:
   std::vector<char> outputs;
 
 public:
-  explicit Chip(const std::string &path, const std::string &chip_name);
+  explicit Chip(const std::string &code, const std::string &chip_name);
 
   size_t get_num_input_slots();
 

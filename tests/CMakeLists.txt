@@ -2,14 +2,15 @@
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  # Specify the commit you depend on and update it regularly.
   URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
 )
-# For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Now simply link against gtest or gtest_main as needed. Eg
-add_executable(parser_test test_parser.cpp)
-target_link_libraries(parser_test gtest_main hdlc)
-add_test(NAME parser_test COMMAND parser_test)
+add_executable(test_parser test_parser.cpp)
+target_link_libraries(test_parser gtest_main hdlc)
+add_test(NAME test_parser COMMAND test_parser)
+
+add_executable(test_chips test_chips.cpp)
+target_link_libraries(test_chips gtest_main hdlc)
+add_test(NAME test_chips COMMAND test_chips)

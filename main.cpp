@@ -15,7 +15,12 @@ int main() {
   llvm::InitializeNativeTargetAsmPrinter();
 
   try {
-    hdlc::Chip chip("code.txt", "And3");
+    std::ifstream f("code.txt");
+
+    std::string code((std::istreambuf_iterator<char>(f)),
+                     (std::istreambuf_iterator<char>()));
+
+    hdlc::Chip chip(code, "And3");
 
     assert(chip.get_num_input_slots() == 3);
     assert(chip.get_num_output_slots() == 1);
