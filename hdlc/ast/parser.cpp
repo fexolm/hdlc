@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "transforms.h"
 
 namespace hdlc::ast {
 
@@ -28,8 +29,12 @@ public:
       auto out_names = std::vector<std::string>{std::string("res")};
       chips["Nand"] = std::make_shared<Chip>(
           "Nand",
-          std::vector<std::shared_ptr<Value>>{}, // TODO: fill params vector
-          std::make_shared<TupleType>(out_types, out_names));
+          std::vector<std::shared_ptr<Value>>{
+              std::make_shared<Value>("a", std::make_shared<WireType>()),
+              std::make_shared<Value>("b", std::make_shared<WireType>())},
+          std::make_shared<TupleType>(out_types, out_names),
+          std::vector<std::shared_ptr<Stmt>>{});
+      res->chips.push_back(chips["Nand"]);
     }
 
     skip_spaces();
@@ -148,7 +153,7 @@ private:
     expect_symbol_sequence("chip"); // TODO: check space
     skip_spaces();
 
-    auto name = read_ident();
+    std::string name(read_ident());
     skip_spaces();
     expect_symbol_sequence("(");
 
@@ -174,12 +179,7 @@ private:
 
     auto body = read_chip_body(local_vars);
 
-    auto chip = std::make_shared<Chip>();
-    chip->ident = name;
-    chip->inputs = params;
-    chip->output_type = result;
-    chip->body = body;
-
+    auto chip = std::make_shared<Chip>(name, params, result, body);
     return chip;
   }
 
@@ -465,7 +465,9 @@ private:
 std::shared_ptr<Package> parse_package(const std::string &data,
                                        const std::string &name) {
   Parser parser(data);
-  return parser.read_package(name);
+  auto pkg = parser.read_package(name);
+  insert_casts(pkg);
+  return pkg;
 }
 
 } // namespace hdlc::ast

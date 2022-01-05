@@ -16,7 +16,17 @@ chip And3(a, b, c) res {
 	tmp := And(a, b)
 	res := And(tmp, c)
 	return res
-})";
+}
+
+chip And4Way(a[4], b[4]) res[4] {
+  return [
+    And(a[0], b[0]), 
+    And(a[1], b[1]), 
+    And(a[2], b[2]), 
+    And(a[3], b[3])
+  ]
+}
+)";
 
 class TestChips : public ::testing::Test {
 protected:

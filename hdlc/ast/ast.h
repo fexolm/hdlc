@@ -24,6 +24,8 @@ struct RegWrite;
 struct RegRead;
 struct SliceIdxExpr;
 struct SliceJoinExpr;
+struct SliceToWireCast;
+struct TupleToWireCast;
 
 struct WireType;
 struct RegisterType;
@@ -45,6 +47,8 @@ struct Visitor {
   virtual void visit(RegRead &rr) = 0;
   virtual void visit(SliceIdxExpr &e) = 0;
   virtual void visit(SliceJoinExpr &e) = 0;
+  virtual void visit(SliceToWireCast &e) = 0;
+  virtual void visit(TupleToWireCast &e) = 0;
 };
 
 struct TypeVisitor {
@@ -58,7 +62,7 @@ struct Package : Node {
   std::string name;
   std::vector<std::shared_ptr<Chip>> chips;
 
-  void visit(Visitor &v) override { v.visit(*this); };
+  void visit(Visitor &v) override;
 };
 
 struct Chip : Node {
@@ -67,44 +71,40 @@ struct Chip : Node {
   std::shared_ptr<TupleType> output_type;
   std::vector<std::shared_ptr<Stmt>> body;
 
-  Chip() {}
-
   Chip(std::string ident, std::vector<std::shared_ptr<Value>> inputs,
-       std::shared_ptr<TupleType> output_type)
-      : ident(ident), inputs(inputs), output_type(output_type) {}
+       std::shared_ptr<TupleType> output_type,
+       std::vector<std::shared_ptr<Stmt>> body);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 };
-
 struct Type {
   virtual void visit(TypeVisitor &v) = 0;
 };
 
 struct WireType : Type {
-  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+  virtual void visit(TypeVisitor &v);
 };
 
 struct RegisterType : Type {
-  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+  virtual void visit(TypeVisitor &v);
 };
 
 struct SliceType : Type {
   std::shared_ptr<Type> element_type;
   size_t size;
 
-  SliceType(std::shared_ptr<Type> element_type, size_t size)
-      : element_type(element_type), size(size) {}
+  SliceType(std::shared_ptr<Type> element_type, size_t size);
 
-  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+  virtual void visit(TypeVisitor &v);
 };
 
 struct TupleType : Type {
   std::vector<std::shared_ptr<Type>> element_types;
   std::vector<std::string> element_names;
   TupleType(std::vector<std::shared_ptr<Type>> types,
-            std::vector<std::string> names)
-      : element_types(std::move(types)), element_names(std::move(names)) {}
-  virtual void visit(TypeVisitor &v) { v.visit(*this); }
+            std::vector<std::string> names);
+
+  virtual void visit(TypeVisitor &v);
 };
 
 struct Stmt : Node {};
@@ -113,7 +113,7 @@ struct AssignStmt : Stmt {
   std::vector<std::shared_ptr<Value>> assignees;
   std::shared_ptr<Expr> rhs;
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 };
 
 struct Expr : Node {
@@ -126,53 +126,67 @@ struct CallExpr : Expr {
   std::shared_ptr<Type> res_type;
 
   CallExpr(std::string name, std::vector<std::shared_ptr<Expr>> args,
-           std::shared_ptr<Type> res_type)
-      : chip_name(name), args(args), res_type(res_type) {}
+           std::shared_ptr<Type> res_type);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 
-  virtual std::shared_ptr<Type> result_type() { return res_type; }
+  virtual std::shared_ptr<Type> result_type();
 };
 
 struct Value : Expr {
   std::string ident;
   std::shared_ptr<Type> type;
 
-  Value(std::string name, std::shared_ptr<Type> type)
-      : ident(name), type(type) {}
+  Value(std::string name, std::shared_ptr<Type> type);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 
-  virtual std::shared_ptr<Type> result_type() { return type; }
+  virtual std::shared_ptr<Type> result_type();
 };
 
 struct RetStmt : Stmt {
   std::vector<std::shared_ptr<Expr>> results;
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 };
 
 struct RegWrite : Stmt {
   std::shared_ptr<Value> reg;
   std::shared_ptr<Expr> rhs;
 
-  explicit RegWrite(std::shared_ptr<Value> reg, std::shared_ptr<Expr> rhs)
-      : reg(reg), rhs(rhs) {}
+  explicit RegWrite(std::shared_ptr<Value> reg, std::shared_ptr<Expr> rhs);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 };
 
 struct RegRead : Expr {
   std::shared_ptr<Value> reg;
 
-  explicit RegRead(std::shared_ptr<Value> reg) : reg(reg) {}
+  explicit RegRead(std::shared_ptr<Value> reg);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 
-  virtual std::shared_ptr<Type> result_type() {
-    assert(false);
-    return nullptr;
-  }
+  std::shared_ptr<Type> result_type() override;
+};
+
+struct CastExpr : Expr {
+  std::shared_ptr<Expr> expr;
+
+  CastExpr(std::shared_ptr<Expr> expr);
+};
+
+struct SliceToWireCast : CastExpr {
+  using CastExpr::CastExpr;
+
+  void visit(Visitor &v) override;
+  std::shared_ptr<Type> result_type() override;
+};
+
+struct TupleToWireCast : CastExpr {
+  using CastExpr::CastExpr;
+
+  void visit(Visitor &v) override;
+  std::shared_ptr<Type> result_type() override;
 };
 
 struct SliceIdxExpr : Expr {
@@ -180,133 +194,22 @@ struct SliceIdxExpr : Expr {
   size_t begin;
   size_t end;
 
-  SliceIdxExpr(std::shared_ptr<Expr> slice, size_t begin, size_t end)
-      : slice(slice), begin(begin), end(end) {}
+  SliceIdxExpr(std::shared_ptr<Expr> slice, size_t begin, size_t end);
 
-  std::shared_ptr<Type> result_type() override {
-    assert(end - begin >= 1);
-    auto slice_type =
-        std::dynamic_pointer_cast<SliceType>(slice->result_type());
-    assert(slice_type->size >= end - begin);
-    return std::make_shared<SliceType>(slice_type->element_type, end - begin);
-  }
+  std::shared_ptr<Type> result_type() override;
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 };
 
 struct SliceJoinExpr : Expr {
   std::vector<std::shared_ptr<Expr>> values;
 
-  SliceJoinExpr(std::vector<std::shared_ptr<Expr>> values)
-      : values(std::move(values)) {}
+  SliceJoinExpr(std::vector<std::shared_ptr<Expr>> values);
 
-  void visit(Visitor &v) override { v.visit(*this); }
+  void visit(Visitor &v) override;
 
-  std::shared_ptr<Type> result_type() override {
-    // TODO: Check if all types are equal
-    return std::make_shared<SliceType>(values[0]->result_type(), values.size());
-  }
+  std::shared_ptr<Type> result_type() override;
 };
 
-struct Printer : Visitor {
-  std::ostream &out;
-
-  Printer(std::ostream &out) : out(out) {}
-
-  void visit(Package &pkg) {
-    out << "Package: " << pkg.name << "\n\n";
-    for (auto &c : pkg.chips) {
-      c->visit(*this);
-    }
-  }
-
-  void visit(Chip &chip) {
-    out << "chip " << chip.ident << " (";
-    for (auto &i : chip.inputs) {
-      i->visit(*this);
-      if (auto st = std::dynamic_pointer_cast<SliceType>(i->type)) {
-        out << "[" << st->size << "]";
-      }
-      out << ", ";
-    }
-    out << ") ";
-
-    for (size_t i = 0; i < chip.output_type->element_types.size(); ++i) {
-      auto name = chip.output_type->element_names[i];
-      auto type = chip.output_type->element_types[i];
-
-      out << name;
-
-      if (auto st = std::dynamic_pointer_cast<SliceType>(type)) {
-        out << "[" << st->size << "]";
-      }
-
-      out << ", ";
-    }
-    out << "{" << std::endl;
-
-    for (auto &s : chip.body) {
-      s->visit(*this);
-      out << std::endl;
-    }
-    out << "}"
-        << "\n\n";
-  }
-
-  void visit(Value &val) { out << val.ident; }
-
-  void visit(AssignStmt &stmt) {
-    out << "    ";
-    for (auto &v : stmt.assignees) {
-      v->visit(*this);
-      out << ", ";
-    }
-    out << ":= ";
-
-    stmt.rhs->visit(*this);
-  }
-
-  void visit(CallExpr &expr) {
-    out << expr.chip_name << "(";
-    for (auto &arg : expr.args) {
-      arg->visit(*this);
-      out << ", ";
-    }
-    out << ")";
-  }
-
-  void visit(RetStmt &stmt) {
-    out << "    return ";
-    for (auto &v : stmt.results) {
-      v->visit(*this);
-      out << ", ";
-    }
-  }
-
-  void visit(RegWrite &rw) {
-    out << "    ";
-    rw.reg->visit(*this);
-    out << " <- ";
-    rw.rhs->visit(*this);
-  }
-
-  void visit(RegRead &rr) {
-    out << "<- ";
-    rr.reg->visit(*this);
-  }
-
-  void visit(SliceIdxExpr &e) override {
-    e.slice->visit(*this);
-    out << "[" << e.begin << ":" << e.end << "]";
-  }
-
-  void visit(SliceJoinExpr &e) override {
-    out << "[";
-    for (auto se : e.values) {
-      se->visit(*this);
-      out << ",";
-    }
-    out << "]";
-  }
-};
+void print_package(std::ostream &out, std::shared_ptr<Package> pkg);
 } // namespace hdlc::ast

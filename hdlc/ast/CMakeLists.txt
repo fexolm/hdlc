@@ -1,1 +1,1 @@
-add_library(ast parser.cpp parser_error.cpp)
+add_library(ast parser.cpp parser_error.cpp ast.cpp casts.cpp)

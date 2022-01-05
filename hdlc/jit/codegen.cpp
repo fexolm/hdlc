@@ -16,16 +16,29 @@ struct TypeTransformVisitor : ast::TypeVisitor {
 private:
   std::stack<llvm::Type *> results_stack;
   llvm::LLVMContext *ctx;
+  bool array_as_ptr;
 
 public:
-  explicit TypeTransformVisitor(llvm::LLVMContext *ctx) : ctx(ctx) {}
+  explicit TypeTransformVisitor(llvm::LLVMContext *ctx, bool array_as_ptr)
+      : ctx(ctx), array_as_ptr(array_as_ptr) {}
 
   virtual void visit(ast::WireType &wire) {
     results_stack.push(llvm::Type::getInt1Ty(*ctx));
   }
 
   virtual void visit(ast::RegisterType &reg) { assert(false); }
-  virtual void visit(ast::SliceType &slice) { assert(false); }
+
+  virtual void visit(ast::SliceType &slice) {
+    slice.element_type->visit(*this);
+    auto element_type = results_stack.top();
+    results_stack.pop();
+    if (array_as_ptr) {
+      results_stack.push(element_type->getPointerTo());
+    } else {
+      results_stack.push(llvm::ArrayType::get(element_type, slice.size));
+    }
+  }
+
   virtual void visit(ast::TupleType &tuple) {
     llvm::SmallVector<llvm::Type *> field_types;
 
@@ -145,9 +158,10 @@ struct CodegenVisitor : ast::Visitor {
     initialize_prebuilt_chips();
   }
 
-  llvm::Type *get_llvm_type(ast::Type &t) {
-    TypeTransformVisitor v(ctx);
-    t.visit(v);
+  llvm::Type *get_llvm_type(std::shared_ptr<ast::Type> t,
+                            bool array_as_ptr = false) {
+    TypeTransformVisitor v(ctx, array_as_ptr);
+    t->visit(v);
     return v.get_type();
   }
 
@@ -157,15 +171,20 @@ struct CodegenVisitor : ast::Visitor {
     }
     create_run_func();
   }
+
   virtual void visit(ast::Chip &chip) {
+    if (chip.ident == "Nand") {
+      return;
+    }
+
     llvm::SmallVector<llvm::Type *> args;
     llvm::SmallVector<llvm::Type *> outputs;
 
     for (auto &i : chip.inputs) {
-      args.push_back(get_llvm_type(*i->type));
+      args.push_back(get_llvm_type(i->type, true));
     }
 
-    auto out = get_llvm_type(*chip.output_type);
+    auto out = get_llvm_type(chip.output_type);
 
     args.insert(args.begin(), out->getPointerTo());
 
@@ -184,7 +203,7 @@ struct CodegenVisitor : ast::Visitor {
     symbol_table.clear();
 
     for (int i = 0; i < chip.inputs.size(); i++) {
-      auto arg = func->getArg(i + 1);
+      llvm::Value *arg = func->getArg(i + 1);
       arg->setName(chip.inputs[i]->ident);
       symbol_table[chip.inputs[i]->ident] = arg;
     }
@@ -237,6 +256,28 @@ struct CodegenVisitor : ast::Visitor {
     results_stack.push(symbol_table[val.ident]);
   }
 
+  void store(llvm::Value *slot_ptr, llvm::Value *val,
+             std::shared_ptr<ast::Type> type) {
+    if (auto t = std::dynamic_pointer_cast<ast::SliceType>(type)) {
+      for (int i = 0; i < t->size; ++i) {
+        auto pointee_type = get_llvm_type(t->element_type);
+        auto p = llvm::cast<llvm::PointerType>(slot_ptr->getType());
+        auto res_slot =
+            ir_builder.CreateConstGEP2_32(p->getElementType(), slot_ptr, 0, i);
+
+        auto p2 = llvm::cast<llvm::PointerType>(val->getType());
+        auto val_slot =
+            ir_builder.CreateConstGEP1_32(p2->getElementType(), val, i);
+        auto val_i = ir_builder.CreateLoad(pointee_type, val_slot);
+        ir_builder.CreateStore(val_i, res_slot);
+      }
+
+      return;
+    }
+
+    ir_builder.CreateStore(val, slot_ptr);
+  }
+
   virtual void visit(ast::RetStmt &stmt) {
     auto res_ptr = current_function->getArg(0);
     auto res_type = llvm::cast<llvm::PointerType>(res_ptr->getType());
@@ -248,7 +289,8 @@ struct CodegenVisitor : ast::Visitor {
       stmt.results[i]->visit(*this);
       auto val = results_stack.top();
       results_stack.pop();
-      ir_builder.CreateStore(val, slot);
+
+      store(slot, val, stmt.results[i]->result_type());
     }
     ir_builder.CreateRetVoid();
   }
@@ -256,8 +298,60 @@ struct CodegenVisitor : ast::Visitor {
   virtual void visit(ast::RegWrite &rw) {}
   virtual void visit(ast::RegRead &rr) {}
 
-  void visit(ast::SliceJoinExpr &stmt) override {}
-  void visit(ast::SliceIdxExpr &expr) override {}
+  void visit(ast::SliceJoinExpr &expr) override {
+    auto res_type =
+        llvm::cast<llvm::PointerType>(get_llvm_type(expr.result_type(), true));
+
+    llvm::Value *slice = ir_builder.CreateAlloca(
+        res_type->getElementType(), ir_builder.getInt64(expr.values.size()));
+
+    for (size_t i = 0; i < expr.values.size(); ++i) {
+      auto slot =
+          ir_builder.CreateConstGEP1_32(res_type->getElementType(), slice, i);
+      expr.values[i]->visit(*this);
+      auto val = results_stack.top();
+      results_stack.pop();
+      ir_builder.CreateStore(val, slot);
+    }
+
+    results_stack.push(slice);
+  }
+
+  void visit(ast::SliceIdxExpr &expr) override {
+    expr.slice->visit(*this);
+    auto slice = results_stack.top();
+    results_stack.pop();
+
+    auto ptr_type = llvm::cast<llvm::PointerType>(
+        get_llvm_type(expr.slice->result_type(), true));
+
+    auto begin_ptr = ir_builder.CreateConstGEP1_32(ptr_type->getElementType(),
+                                                   slice, expr.begin);
+
+    results_stack.push(begin_ptr);
+  }
+
+  void visit(ast::SliceToWireCast &e) override {
+    e.expr->visit(*this);
+    auto slice = results_stack.top();
+    results_stack.pop();
+
+    results_stack.push(
+        ir_builder.CreateLoad(get_llvm_type(e.result_type()), slice));
+  }
+  void visit(ast::TupleToWireCast &e) override {
+    e.expr->visit(*this);
+    auto struct_ptr = results_stack.top();
+    results_stack.pop();
+
+    auto ptr_type = llvm::cast<llvm::PointerType>(struct_ptr->getType());
+
+    auto element_ptr =
+        ir_builder.CreateStructGEP(ptr_type->getElementType(), struct_ptr, 0);
+
+    results_stack.push(
+        ir_builder.CreateLoad(get_llvm_type(e.result_type()), element_ptr));
+  }
 };
 
 std::unique_ptr<llvm::Module>
@@ -265,6 +359,7 @@ transform_pkg_to_llvm(llvm::LLVMContext *ctx, std::shared_ptr<ast::Package> pkg,
                       std::string entrypoint) {
   CodegenVisitor v(ctx, entrypoint);
   v.visit(*pkg);
+  v.module->print(llvm::outs(), nullptr);
   return std::move(v.module);
 }
 } // namespace hdlc::jit
