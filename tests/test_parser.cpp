@@ -115,3 +115,45 @@ chip And (a, b) {
       ast::parse_package(code, "test_pkg"), ast::ParserError,
       "Parser error: no output statements found (line 1, pos 17)");
 }
+
+TEST(ParsePackage, Slices) {
+  std::string code = R"(
+chip And (a, b) res {
+    tmp := Nand(a, b)
+    res := Nand(tmp, tmp)
+    return res
+}
+
+chip And4Way (a[4], b[4]) res[4] {
+    t1 := And(a[0], b[0])
+    t2 := And(a[1], b[1])
+    t3 := And(a[2], b[2])
+    t4 := And(a[3], b[3])
+    return [t1, t2, t3, t4]
+})";
+
+  std::string expected_result = R"(Package: test_pkg
+
+chip And (a, b, ) res, {
+    tmp, := Nand(a, b, )
+    res, := Nand(tmp, tmp, )
+    return res, 
+}
+
+chip And4Way (a[4], b[4], ) res[4], {
+    t1, := And(a[0:1], b[0:1], )
+    t2, := And(a[1:2], b[1:2], )
+    t3, := And(a[2:3], b[2:3], )
+    t4, := And(a[3:4], b[3:4], )
+    return [t1,t2,t3,t4,], 
+}
+
+)";
+
+  auto pkg = ast::parse_package(code, "test_pkg");
+  std::stringstream ss;
+  ast::Printer p(ss);
+  p.visit(*pkg);
+
+  EXPECT_EQ(expected_result, ss.str());
+}

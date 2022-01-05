@@ -202,13 +202,30 @@ private:
     return res;
   }
 
+  uint64_t read_uint() {
+    uint64_t res = 0;
+    while (std::isdigit(peek_symbol())) {
+      res *= 10;
+      res += read_symbol() - '0';
+    }
+    return res;
+  }
+
   std::shared_ptr<Value> read_param() {
     std::string name(read_ident());
     skip_spaces();
+    if (peek_symbol() == '[') {
+      read_symbol();
+      skip_spaces();
+      auto size = read_uint();
+      skip_spaces();
+      expect_symbol_sequence("]");
+      return std::make_shared<Value>(
+          name,
+          std::make_shared<SliceType>(std::make_shared<WireType>(), size));
+    }
 
-    auto res = std::make_shared<Value>(name, std::make_shared<WireType>());
-
-    return res;
+    return std::make_shared<Value>(name, std::make_shared<WireType>());
   }
 
   std::shared_ptr<ast::TupleType> read_result_type() {
@@ -221,12 +238,25 @@ private:
 
     while (true) {
       std::string name(read_ident());
-      auto type = std::make_shared<WireType>();
-
-      res_types.push_back(type);
-      res_names.push_back(name);
-
       skip_spaces();
+
+      if (peek_symbol() == '[') {
+        read_symbol();
+        skip_spaces();
+        auto size = read_uint();
+        skip_spaces();
+        expect_symbol_sequence("]");
+        skip_spaces();
+        auto type =
+            std::make_shared<SliceType>(std::make_shared<WireType>(), size);
+        res_types.push_back(type);
+        res_names.push_back(name);
+      } else {
+        auto type = std::make_shared<WireType>();
+        res_types.push_back(type);
+        res_names.push_back(name);
+      }
+
       if (peek_symbol() == ',') {
         read_symbol();
         skip_spaces();
@@ -310,11 +340,41 @@ private:
     return res;
   }
 
+  std::shared_ptr<SliceIdxExpr> read_slice_idx_expr(SymbolMap &symbol_map) {
+    std::string slice_name(read_ident());
+    if (!symbol_map.count(slice_name)) {
+      throw ParserError("slice with the following name not found", line,
+                        line_pos);
+    }
+    auto slice = symbol_map[slice_name];
+    skip_spaces();
+
+    expect_symbol_sequence("[");
+    skip_spaces();
+
+    auto begin = read_uint();
+    skip_spaces();
+    auto end = begin + 1;
+    if (peek_symbol() == ':') {
+      read_symbol();
+      skip_spaces();
+      end = read_uint();
+      skip_spaces();
+    }
+    expect_symbol_sequence("]");
+
+    return std::make_shared<SliceIdxExpr>(slice, begin, end);
+  }
+
   std::shared_ptr<Expr> read_expr(SymbolMap &symbol_map) {
     if (peek_symbol() == '<') {
       return read_reg_read(symbol_map);
     }
+    if (peek_symbol() == '[') {
+      return read_slice_join_expr(symbol_map);
+    }
 
+    auto cur_pos = pos;
     std::string ident(read_ident());
     skip_spaces();
     if (peek_symbol() == '(') {
@@ -326,11 +386,24 @@ private:
       return std::make_shared<CallExpr>(ident, params,
                                         chips[ident]->output_type);
     }
+    if (peek_symbol() == '[') {
+      move_to(cur_pos);
+      return read_slice_idx_expr(symbol_map);
+    }
 
     if (!symbol_map.count(ident)) {
       throw ParserError("Referenced variable not initialized", line, line_pos);
     }
     return symbol_map[ident];
+  }
+
+  std::shared_ptr<SliceJoinExpr> read_slice_join_expr(SymbolMap &symbol_map) {
+    expect_symbol_sequence("[");
+    skip_spaces();
+    auto exprs = read_expr_list(symbol_map);
+    skip_spaces();
+    expect_symbol_sequence("]");
+    return std::make_shared<SliceJoinExpr>(exprs);
   }
 
   std::shared_ptr<RegRead> read_reg_read(SymbolMap &symbol_map) {

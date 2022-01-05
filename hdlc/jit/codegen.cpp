@@ -255,6 +255,9 @@ struct CodegenVisitor : ast::Visitor {
 
   virtual void visit(ast::RegWrite &rw) {}
   virtual void visit(ast::RegRead &rr) {}
+
+  void visit(ast::SliceJoinExpr &stmt) override {}
+  void visit(ast::SliceIdxExpr &expr) override {}
 };
 
 std::unique_ptr<llvm::Module>

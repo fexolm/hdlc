@@ -22,6 +22,8 @@ struct CallExpr;
 struct RetStmt;
 struct RegWrite;
 struct RegRead;
+struct SliceIdxExpr;
+struct SliceJoinExpr;
 
 struct WireType;
 struct RegisterType;
@@ -41,6 +43,8 @@ struct Visitor {
   virtual void visit(RetStmt &stmt) = 0;
   virtual void visit(RegWrite &rw) = 0;
   virtual void visit(RegRead &rr) = 0;
+  virtual void visit(SliceIdxExpr &e) = 0;
+  virtual void visit(SliceJoinExpr &e) = 0;
 };
 
 struct TypeVisitor {
@@ -171,26 +175,73 @@ struct RegRead : Expr {
   }
 };
 
+struct SliceIdxExpr : Expr {
+  std::shared_ptr<Expr> slice;
+  size_t begin;
+  size_t end;
+
+  SliceIdxExpr(std::shared_ptr<Expr> slice, size_t begin, size_t end)
+      : slice(slice), begin(begin), end(end) {}
+
+  std::shared_ptr<Type> result_type() override {
+    assert(end - begin >= 1);
+    auto slice_type =
+        std::dynamic_pointer_cast<SliceType>(slice->result_type());
+    assert(slice_type->size >= end - begin);
+    return std::make_shared<SliceType>(slice_type->element_type, end - begin);
+  }
+
+  void visit(Visitor &v) override { v.visit(*this); }
+};
+
+struct SliceJoinExpr : Expr {
+  std::vector<std::shared_ptr<Expr>> values;
+
+  SliceJoinExpr(std::vector<std::shared_ptr<Expr>> values)
+      : values(std::move(values)) {}
+
+  void visit(Visitor &v) override { v.visit(*this); }
+
+  std::shared_ptr<Type> result_type() override {
+    // TODO: Check if all types are equal
+    return std::make_shared<SliceType>(values[0]->result_type(), values.size());
+  }
+};
+
 struct Printer : Visitor {
   std::ostream &out;
 
   Printer(std::ostream &out) : out(out) {}
+
   void visit(Package &pkg) {
     out << "Package: " << pkg.name << "\n\n";
     for (auto &c : pkg.chips) {
       c->visit(*this);
     }
   }
+
   void visit(Chip &chip) {
     out << "chip " << chip.ident << " (";
     for (auto &i : chip.inputs) {
       i->visit(*this);
+      if (auto st = std::dynamic_pointer_cast<SliceType>(i->type)) {
+        out << "[" << st->size << "]";
+      }
       out << ", ";
     }
     out << ") ";
 
-    for (auto &name : chip.output_type->element_names) {
-      out << name << ", ";
+    for (size_t i = 0; i < chip.output_type->element_types.size(); ++i) {
+      auto name = chip.output_type->element_names[i];
+      auto type = chip.output_type->element_types[i];
+
+      out << name;
+
+      if (auto st = std::dynamic_pointer_cast<SliceType>(type)) {
+        out << "[" << st->size << "]";
+      }
+
+      out << ", ";
     }
     out << "{" << std::endl;
 
@@ -203,6 +254,7 @@ struct Printer : Visitor {
   }
 
   void visit(Value &val) { out << val.ident; }
+
   void visit(AssignStmt &stmt) {
     out << "    ";
     for (auto &v : stmt.assignees) {
@@ -213,6 +265,7 @@ struct Printer : Visitor {
 
     stmt.rhs->visit(*this);
   }
+
   void visit(CallExpr &expr) {
     out << expr.chip_name << "(";
     for (auto &arg : expr.args) {
@@ -221,6 +274,7 @@ struct Printer : Visitor {
     }
     out << ")";
   }
+
   void visit(RetStmt &stmt) {
     out << "    return ";
     for (auto &v : stmt.results) {
@@ -239,6 +293,20 @@ struct Printer : Visitor {
   void visit(RegRead &rr) {
     out << "<- ";
     rr.reg->visit(*this);
+  }
+
+  void visit(SliceIdxExpr &e) override {
+    e.slice->visit(*this);
+    out << "[" << e.begin << ":" << e.end << "]";
+  }
+
+  void visit(SliceJoinExpr &e) override {
+    out << "[";
+    for (auto se : e.values) {
+      se->visit(*this);
+      out << ",";
+    }
+    out << "]";
   }
 };
 } // namespace hdlc::ast
