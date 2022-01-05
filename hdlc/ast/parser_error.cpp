@@ -7,4 +7,4 @@ ParserError::ParserError(std::string msg, size_t line, size_t line_pos) {
      << ")";
   message = ss.str();
 }
-}
+} // namespace hdlc::ast
