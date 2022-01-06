@@ -287,10 +287,24 @@ struct CodegenVisitor : ast::Visitor {
     auto struct_type =
         llvm::cast<llvm::StructType>(struct_ptr_type->getElementType());
 
+    auto tuple_type =
+        std::static_pointer_cast<ast::TupleType>(stmt.rhs->result_type());
+
     for (unsigned i = 0; i < stmt.assignees.size(); i++) {
+      auto type = tuple_type->element_types[i];
+
       auto val_ptr = ir_builder.CreateStructGEP(struct_type, res, i,
                                                 stmt.assignees[i]->ident);
-      auto val = ir_builder.CreateLoad(struct_type->getElementType(i), val_ptr);
+
+      llvm::Value *val;
+
+      if (auto st = std::dynamic_pointer_cast<ast::SliceType>(type)) {
+        val = ir_builder.CreateConstGEP2_32(struct_type->getElementType(i),
+                                            val_ptr, 0, i);
+      } else {
+        val = ir_builder.CreateLoad(struct_type->getElementType(i), val_ptr);
+      }
+
       val->setName(stmt.assignees[i]->ident);
       symbol_table[stmt.assignees[i]->ident] = val;
     }

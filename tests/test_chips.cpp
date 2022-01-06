@@ -26,6 +26,11 @@ chip And4Way(a[4], b[4]) res[4] {
     And(a[3], b[3])
   ]
 }
+
+chip StrangeAnd2Way(a[2], b[2]) res [2] {
+  tmp := And4Way([a[0], a[1], a[0], a[1]], [b[0], b[1], b[0], b[1]])
+  return tmp[0:2]
+}
 )";
 
 class TestChips : public ::testing::Test {
@@ -80,6 +85,30 @@ TEST_F(TestChips, And4Way) {
       }
 
       for (int offset = 0; offset < 4; ++offset) {
+        outputs.push_back((res >> offset) & 1);
+      }
+
+      compare_results(chip, inputs, outputs);
+    }
+  }
+}
+
+TEST_F(TestChips, StrangeAnd2Way) {
+  hdlc::Chip chip(g_code, "StrangeAnd2Way");
+  for (int x = 0; x < 4; ++x) {
+    for (int y = 0; y < 4; ++y) {
+      auto res = x & y;
+      std::vector<int8_t> inputs;
+      std::vector<int8_t> outputs;
+
+      for (int offset = 0; offset < 2; ++offset) {
+        inputs.push_back((x >> offset) & 1);
+      }
+      for (int offset = 0; offset < 2; ++offset) {
+        inputs.push_back((y >> offset) & 1);
+      }
+
+      for (int offset = 0; offset < 2; ++offset) {
         outputs.push_back((res >> offset) & 1);
       }
 

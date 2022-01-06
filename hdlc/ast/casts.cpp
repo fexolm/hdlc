@@ -28,7 +28,21 @@ struct InsertCastsVisitor : Visitor {
 
   void visit(Value &val) {}
 
-  void visit(AssignStmt &stmt) { stmt.rhs->visit(*this); }
+  void visit(AssignStmt &stmt) {
+    // Correctly propogate types at first as we don't do this at parsing time
+    auto args_count = stmt.assignees.size();
+    // TODO: Check
+    auto tuple_type =
+        std::static_pointer_cast<TupleType>(stmt.rhs->result_type());
+
+    assert(tuple_type->element_types.size() == args_count);
+
+    for (int i = 0; i < args_count; i++) {
+      auto type = tuple_type->element_types[i];
+      stmt.assignees[i]->type = type;
+    }
+    stmt.rhs->visit(*this);
+  }
 
   std::shared_ptr<Expr> cast(std::shared_ptr<Expr> expr,
                              std::shared_ptr<Type> type) {
