@@ -27,9 +27,18 @@ chip And4Way(a[4], b[4]) res[4] {
   ]
 }
 
-chip StrangeAnd2Way(a[2], b[2]) res [2] {
+chip StrangeAnd2Way(a[2], b[2]) res[2] {
   tmp := And4Way([a[0], a[1], a[0], a[1]], [b[0], b[1], b[0], b[1]])
   return tmp[0:2]
+}
+
+chip ArrayOfOne(a[1]) res[1] {
+  return a
+}
+
+chip CallArrayOfOne(a) res {
+  tmp:= ArrayOfOne([a])
+  return tmp[0]
 }
 )";
 
@@ -115,4 +124,10 @@ TEST_F(TestChips, StrangeAnd2Way) {
       compare_results(chip, inputs, outputs);
     }
   }
+}
+
+TEST_F(TestChips, ArrayOfOne) {
+  hdlc::Chip chip(g_code, "CallArrayOfOne");
+  compare_results(chip, {0}, {0});
+  compare_results(chip, {1}, {1});
 }
