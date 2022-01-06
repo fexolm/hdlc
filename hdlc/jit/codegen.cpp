@@ -67,6 +67,7 @@ struct CodegenVisitor : ast::Visitor {
   std::string entrypoint;
 
   std::unordered_map<std::string, llvm::Value *> symbol_table;
+  std::unordered_map<std::string, ast::Chip *> chips;
 
   std::unique_ptr<llvm::Module> module;
 
@@ -86,6 +87,7 @@ struct CodegenVisitor : ast::Visitor {
     ir_builder.SetInsertPoint(bb);
 
     auto f = module->getFunction(entrypoint);
+    auto chip = chips[entrypoint];
 
     auto in_ptr = func->getArg(0);
     auto out_ptr = func->getArg(1);
@@ -93,29 +95,89 @@ struct CodegenVisitor : ast::Visitor {
     auto f_res_type = llvm::cast<llvm::PointerType>(f->getArg(0)->getType());
     auto f_res_struct_type =
         llvm::cast<llvm::StructType>(f_res_type->getElementType());
+
     llvm::SmallVector<llvm::Value *> args;
 
     auto res = ir_builder.CreateAlloca(f_res_struct_type);
     args.push_back(res);
 
-    for (int i = 0; i < f->arg_size() - 1; i++) {
-      llvm::Value *val =
-          ir_builder.CreateConstGEP1_32(llvm::Type::getInt8Ty(*ctx), in_ptr, i);
+    size_t offset = 0;
+
+    for (int arg_num = 0; arg_num < f->arg_size() - 1; arg_num++) {
+      auto type = chip->inputs[arg_num]->result_type();
+      if (auto st = std::dynamic_pointer_cast<ast::SliceType>(type)) {
+        auto arr = ir_builder.CreateAlloca(ir_builder.getInt1Ty(),
+                                           ir_builder.getInt32(st->size));
+
+        for (int i = 0; i < st->size; i++) {
+          auto slot =
+              ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), arr, i);
+
+          llvm::Value *val = ir_builder.CreateConstGEP1_32(
+              llvm::Type::getInt8Ty(*ctx), in_ptr, offset + i);
+
+          val = ir_builder.CreateLoad(llvm::Type::getInt8Ty(*ctx), val);
+          val =
+              ir_builder.CreateIntCast(val, llvm::Type::getInt1Ty(*ctx), false);
+
+          ir_builder.CreateStore(val, slot);
+        }
+
+        args.push_back(arr);
+
+        offset += st->size;
+        continue;
+      }
+
+      assert(std::dynamic_pointer_cast<ast::WireType>(type));
+
+      llvm::Value *val = ir_builder.CreateConstGEP1_32(
+          llvm::Type::getInt8Ty(*ctx), in_ptr, offset);
 
       val = ir_builder.CreateLoad(llvm::Type::getInt8Ty(*ctx), val);
       val = ir_builder.CreateIntCast(val, llvm::Type::getInt1Ty(*ctx), false);
 
       args.push_back(val);
+      offset++;
     }
 
     ir_builder.CreateCall(f, args);
 
-    for (unsigned i = 0; i < f_res_struct_type->getNumElements(); i++) {
-      auto slot = ir_builder.CreateConstGEP1_32(llvm::Type::getInt8Ty(*ctx),
-                                                out_ptr, i);
+    offset = 0;
 
-      llvm::Value *val = ir_builder.CreateStructGEP(f_res_struct_type, res, i);
-      val = ir_builder.CreateLoad(f_res_struct_type->getElementType(i), val);
+    for (unsigned res_num = 0; res_num < f_res_struct_type->getNumElements();
+         res_num++) {
+      auto type = chip->output_type->element_types[res_num];
+
+      llvm::Value *val =
+          ir_builder.CreateStructGEP(f_res_struct_type, res, res_num);
+
+      if (auto st = std::dynamic_pointer_cast<ast::SliceType>(type)) {
+
+        for (int i = 0; i < st->size; i++) {
+          auto slot = ir_builder.CreateConstGEP1_32(llvm::Type::getInt8Ty(*ctx),
+                                                    out_ptr, i + offset);
+
+          auto val_i = ir_builder.CreateConstGEP2_32(
+              f_res_struct_type->getElementType(res_num), val, 0, i);
+
+          val_i = ir_builder.CreateLoad(ir_builder.getInt1Ty(), val_i);
+          val_i = ir_builder.CreateIntCast(val_i, llvm::Type::getInt8Ty(*ctx),
+                                           false);
+
+          ir_builder.CreateStore(val_i, slot);
+        }
+
+        offset += st->size;
+        continue;
+      }
+
+      assert(std::dynamic_pointer_cast<ast::WireType>(type));
+
+      auto slot = ir_builder.CreateConstGEP1_32(llvm::Type::getInt8Ty(*ctx),
+                                                out_ptr, offset);
+
+      val = ir_builder.CreateLoad(llvm::Type::getInt1Ty(*ctx), val);
       val = ir_builder.CreateIntCast(val, llvm::Type::getInt8Ty(*ctx), false);
 
       ir_builder.CreateStore(val, slot);
@@ -176,6 +238,8 @@ struct CodegenVisitor : ast::Visitor {
     if (chip.ident == "Nand") {
       return;
     }
+
+    chips[chip.ident] = &chip;
 
     llvm::SmallVector<llvm::Type *> args;
     llvm::SmallVector<llvm::Type *> outputs;
@@ -248,6 +312,7 @@ struct CodegenVisitor : ast::Visitor {
       params.push_back(results_stack.top());
       results_stack.pop();
     }
+
     ir_builder.CreateCall(callee, params);
     results_stack.push(res);
   }
@@ -359,7 +424,6 @@ transform_pkg_to_llvm(llvm::LLVMContext *ctx, std::shared_ptr<ast::Package> pkg,
                       std::string entrypoint) {
   CodegenVisitor v(ctx, entrypoint);
   v.visit(*pkg);
-  v.module->print(llvm::outs(), nullptr);
   return std::move(v.module);
 }
 } // namespace hdlc::jit

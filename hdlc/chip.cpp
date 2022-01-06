@@ -8,12 +8,6 @@
 #include <llvm/IR/LLVMContext.h>
 
 namespace hdlc {
-Slot::Slot(bool *ptr) : ptr(ptr) {}
-
-void Slot::set(bool val) { *ptr = val; }
-
-bool Slot::get() const { return *ptr; }
-
 Chip::Chip(const std::string &code, const std::string &chip_name) {
   auto pkg = ast::parse_package(code, "gates");
 
@@ -31,18 +25,9 @@ Chip::Chip(const std::string &code, const std::string &chip_name) {
   }
 
   auto requested_chip = *requested_chip_iter;
-
-  inputs.resize(requested_chip->inputs.size());
-  outputs.resize(requested_chip->output_type->element_types.size());
 }
 
-size_t Chip::get_num_input_slots() { return inputs.size(); }
-
-size_t Chip::get_num_output_slots() { return outputs.size(); }
-
-Slot Chip::get_input_slot(size_t i) { return Slot((bool *)&inputs[i]); }
-
-const Slot Chip::get_output_slot(size_t i) { return Slot((bool *)&outputs[i]); }
-
-void Chip::run() { module->run((bool *)inputs.data(), (bool *)outputs.data()); }
+void Chip::run(int8_t *inputs, int8_t *outputs) {
+  module->run(inputs, outputs);
+}
 } // namespace hdlc

@@ -35,17 +35,13 @@ protected:
     llvm::InitializeNativeTargetAsmPrinter();
   }
 
-  void compare_results(hdlc::Chip &chip, std::vector<char> inputs,
-                       std::vector<char> expected_outputs) {
-    for (int i = 0; i < chip.get_num_input_slots(); ++i) {
-      auto slot = chip.get_input_slot(i);
-      slot.set(inputs[i]);
-    }
-    chip.run();
+  void compare_results(hdlc::Chip &chip, std::vector<int8_t> inputs,
+                       std::vector<int8_t> expected_outputs) {
+    std::vector<int8_t> real_outputs(expected_outputs.size());
+    chip.run(inputs.data(), real_outputs.data());
 
-    for (int i = 0; i < chip.get_num_output_slots(); ++i) {
-      auto slot = chip.get_output_slot(i);
-      EXPECT_EQ(slot.get(), expected_outputs[i]);
+    for (int i = 0; i < real_outputs.size(); ++i) {
+      EXPECT_EQ(real_outputs[i], expected_outputs[i]);
     }
   }
 };
@@ -65,5 +61,29 @@ TEST_F(TestChips, And3) {
     char b = (x >> 1) & 1;
     char c = (x >> 2) & 1;
     compare_results(chip, {a, b, c}, {a && b && c});
+  }
+}
+
+TEST_F(TestChips, And4Way) {
+  hdlc::Chip chip(g_code, "And4Way");
+  for (int x = 0; x < 16; ++x) {
+    for (int y = 0; y < 16; ++y) {
+      auto res = x & y;
+      std::vector<int8_t> inputs;
+      std::vector<int8_t> outputs;
+
+      for (int offset = 0; offset < 4; ++offset) {
+        inputs.push_back((x >> offset) & 1);
+      }
+      for (int offset = 0; offset < 4; ++offset) {
+        inputs.push_back((y >> offset) & 1);
+      }
+
+      for (int offset = 0; offset < 4; ++offset) {
+        outputs.push_back((res >> offset) & 1);
+      }
+
+      compare_results(chip, inputs, outputs);
+    }
   }
 }

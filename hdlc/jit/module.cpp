@@ -16,5 +16,5 @@ Module::Module(std::unique_ptr<llvm::Module> module,
   run_func = (decltype(run_func))f.getAddress();
 }
 
-void Module::run(bool *inputs, bool *outputs) { run_func(inputs, outputs); }
+void Module::run(int8_t *inputs, int8_t *outputs) { run_func(inputs, outputs); }
 } // namespace hdlc::jit
