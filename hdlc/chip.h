@@ -11,6 +11,8 @@ class Chip {
 private:
   std::unique_ptr<jit::Module> module;
 
+  std::vector<int8_t> reg_buf;
+
 public:
   explicit Chip(const std::string &code, const std::string &chip_name);
 

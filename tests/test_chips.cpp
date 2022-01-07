@@ -52,6 +52,13 @@ chip PrevSlice(a[4]) res[4] {
   r <- a
   return <- r
 }
+
+chip PrevSlice8(a[8]) res[8] {
+  p1 := PrevSlice(a[0:4])
+  p2 := PrevSlice(a[4:8])
+
+  return [p1[0], p1[1], p1[2], p1[3], p2[0], p2[1], p2[2], p2[3]]
+}
 )";
 
 class TestChips : public ::testing::Test {
@@ -158,4 +165,12 @@ TEST_F(TestChips, PrevSlice) {
   compare_results(chip, {0, 1, 1, 1}, {1, 0, 1, 0});
   compare_results(chip, {1, 1, 1, 1}, {0, 1, 1, 1});
   compare_results(chip, {0, 0, 0, 0}, {1, 1, 1, 1});
+}
+
+TEST_F(TestChips, PrevSlice8) {
+  hdlc::Chip chip(g_code, "PrevSlice8");
+  compare_results(chip, {1, 0, 1, 0, 0, 1, 1, 1}, {0, 0, 0, 0, 0, 0, 0, 0});
+  compare_results(chip, {1, 0, 0, 1, 0, 0, 1, 1}, {1, 0, 1, 0, 0, 1, 1, 1});
+  compare_results(chip, {1, 1, 1, 0, 0, 1, 0, 0}, {1, 0, 0, 1, 0, 0, 1, 1});
+  compare_results(chip, {0, 0, 1, 0, 0, 0, 0, 1}, {1, 1, 1, 0, 0, 1, 0, 0});
 }

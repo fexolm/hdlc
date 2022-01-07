@@ -13,8 +13,7 @@ Chip::Chip(const std::string &code, const std::string &chip_name) {
 
   auto ctx = std::make_unique<llvm::LLVMContext>();
 
-  module = std::make_unique<jit::Module>(
-      jit::transform_pkg_to_llvm(ctx.get(), pkg, chip_name), std::move(ctx));
+  module = jit::transform_pkg_to_module(std::move(ctx), pkg, chip_name);
 
   auto requested_chip_iter =
       std::find_if(pkg->chips.begin(), pkg->chips.end(),
@@ -25,9 +24,11 @@ Chip::Chip(const std::string &code, const std::string &chip_name) {
   }
 
   auto requested_chip = *requested_chip_iter;
+
+  reg_buf.resize(module->buffer_size());
 }
 
 void Chip::run(int8_t *inputs, int8_t *outputs) {
-  module->run(inputs, outputs);
+  module->run(reg_buf.data(), inputs, outputs);
 }
 } // namespace hdlc

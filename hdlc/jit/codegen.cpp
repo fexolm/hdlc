@@ -12,6 +12,63 @@
 #include <unordered_map>
 namespace hdlc::jit {
 
+struct RegMemCounter : ast::Visitor {
+  std::unordered_map<std::string, size_t> mem_per_chip;
+  size_t current_size = 0;
+
+  void visit(ast::Package &pkg) override {
+    for (auto &c : pkg.chips) {
+      c->visit(*this);
+    }
+  }
+
+  void visit(ast::Chip &chip) override {
+    current_size = 0;
+    for (auto &s : chip.body) {
+      s->visit(*this);
+    }
+    mem_per_chip[chip.ident] = current_size;
+  }
+
+  void visit(ast::AssignStmt &stmt) override { stmt.rhs->visit(*this); }
+
+  void visit(ast::CallExpr &expr) override {
+    current_size += mem_per_chip[expr.chip_name];
+  }
+
+  void visit(ast::Value &val) override {}
+
+  void visit(ast::RetStmt &stmt) override {
+    for (auto &e : stmt.results) {
+      e->visit(*this);
+    }
+  }
+
+  void visit(ast::RegWrite &rw) override { rw.rhs->visit(*this); }
+
+  void visit(ast::RegRead &rr) override {}
+
+  void visit(ast::SliceIdxExpr &e) override {}
+
+  void visit(ast::SliceJoinExpr &e) override {
+    for (auto v : e.values) {
+      v->visit(*this);
+    }
+  }
+
+  void visit(ast::SliceToWireCast &e) override { e.expr->visit(*this); }
+
+  void visit(ast::TupleToWireCast &e) override { e.expr->visit(*this); }
+
+  void visit(ast::CreateRegisterExpr &e) override {
+    if (auto t = std::dynamic_pointer_cast<ast::SliceType>(e.result_type())) {
+      current_size += t->size;
+    } else {
+      current_size++;
+    }
+  }
+};
+
 struct TypeTransformVisitor : ast::TypeVisitor {
 private:
   std::stack<llvm::Type *> results_stack;
@@ -23,11 +80,11 @@ public:
       : ctx(ctx), array_as_ptr(array_as_ptr) {}
 
   virtual void visit(ast::WireType &wire) {
-    results_stack.push(llvm::Type::getInt1Ty(*ctx));
+    results_stack.push(llvm::Type::getInt8Ty(*ctx));
   }
 
   virtual void visit(ast::RegisterType &reg) {
-    results_stack.push(llvm::Type::getInt1Ty(*ctx));
+    results_stack.push(llvm::Type::getInt8Ty(*ctx));
   }
 
   virtual void visit(ast::SliceType &slice) {
@@ -70,18 +127,21 @@ struct CodegenVisitor : ast::Visitor {
 
   std::unordered_map<std::string, llvm::Value *> symbol_table;
   std::unordered_map<std::string, ast::Chip *> chips;
+  std::unordered_map<std::string, size_t> mem_per_chip;
 
   std::unique_ptr<llvm::Module> module;
 
   llvm::BasicBlock *update_reg_block;
 
+  size_t reg_buf_offset = 0;
+
   void initialize_prebuilt_chips() { add_nand(); }
 
   void create_run_func() {
     auto out = llvm::Type::getVoidTy(*ctx);
-    auto bool_array = llvm::Type::getInt8Ty(*ctx)->getPointerTo();
+    auto buf_ty = llvm::Type::getInt8Ty(*ctx)->getPointerTo();
 
-    auto sig = llvm::FunctionType::get(out, {bool_array, bool_array}, false);
+    auto sig = llvm::FunctionType::get(out, {buf_ty, buf_ty, buf_ty}, false);
 
     auto func = llvm::Function::Create(sig, llvm::Function::ExternalLinkage,
                                        "run", module.get());
@@ -93,8 +153,9 @@ struct CodegenVisitor : ast::Visitor {
     auto f = module->getFunction(entrypoint);
     auto chip = chips[entrypoint];
 
-    auto in_ptr = func->getArg(0);
-    auto out_ptr = func->getArg(1);
+    auto reg_buf = func->getArg(0);
+    auto in_ptr = func->getArg(1);
+    auto out_ptr = func->getArg(2);
 
     auto f_res_type = llvm::cast<llvm::PointerType>(f->getArg(0)->getType());
     auto f_res_struct_type =
@@ -105,24 +166,24 @@ struct CodegenVisitor : ast::Visitor {
     auto res = ir_builder.CreateAlloca(f_res_struct_type);
     args.push_back(res);
 
+    args.push_back(reg_buf);
+
     size_t offset = 0;
 
-    for (int arg_num = 0; arg_num < f->arg_size() - 1; arg_num++) {
+    for (int arg_num = 0; arg_num < f->arg_size() - 2; arg_num++) {
       auto type = chip->inputs[arg_num]->result_type();
       if (auto st = std::dynamic_pointer_cast<ast::SliceType>(type)) {
-        auto arr = ir_builder.CreateAlloca(ir_builder.getInt1Ty(),
+        auto arr = ir_builder.CreateAlloca(ir_builder.getInt8Ty(),
                                            ir_builder.getInt32(st->size));
 
         for (int i = 0; i < st->size; i++) {
           auto slot =
-              ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), arr, i);
+              ir_builder.CreateConstGEP1_32(ir_builder.getInt8Ty(), arr, i);
 
           llvm::Value *val = ir_builder.CreateConstGEP1_32(
               llvm::Type::getInt8Ty(*ctx), in_ptr, offset + i);
 
           val = ir_builder.CreateLoad(llvm::Type::getInt8Ty(*ctx), val);
-          val =
-              ir_builder.CreateIntCast(val, llvm::Type::getInt1Ty(*ctx), false);
 
           ir_builder.CreateStore(val, slot);
         }
@@ -139,7 +200,7 @@ struct CodegenVisitor : ast::Visitor {
           llvm::Type::getInt8Ty(*ctx), in_ptr, offset);
 
       val = ir_builder.CreateLoad(llvm::Type::getInt8Ty(*ctx), val);
-      val = ir_builder.CreateIntCast(val, llvm::Type::getInt1Ty(*ctx), false);
+      val = ir_builder.CreateIntCast(val, llvm::Type::getInt8Ty(*ctx), false);
 
       args.push_back(val);
       offset++;
@@ -165,7 +226,7 @@ struct CodegenVisitor : ast::Visitor {
           auto val_i = ir_builder.CreateConstGEP2_32(
               f_res_struct_type->getElementType(res_num), val, 0, i);
 
-          val_i = ir_builder.CreateLoad(ir_builder.getInt1Ty(), val_i);
+          val_i = ir_builder.CreateLoad(ir_builder.getInt8Ty(), val_i);
           val_i = ir_builder.CreateIntCast(val_i, llvm::Type::getInt8Ty(*ctx),
                                            false);
 
@@ -181,7 +242,7 @@ struct CodegenVisitor : ast::Visitor {
       auto slot = ir_builder.CreateConstGEP1_32(llvm::Type::getInt8Ty(*ctx),
                                                 out_ptr, offset);
 
-      val = ir_builder.CreateLoad(llvm::Type::getInt1Ty(*ctx), val);
+      val = ir_builder.CreateLoad(llvm::Type::getInt8Ty(*ctx), val);
       val = ir_builder.CreateIntCast(val, llvm::Type::getInt8Ty(*ctx), false);
 
       ir_builder.CreateStore(val, slot);
@@ -192,13 +253,13 @@ struct CodegenVisitor : ast::Visitor {
 
   void add_nand() {
     auto out =
-        llvm::StructType::create({llvm::Type::getInt1Ty(*ctx)}, "NandResult");
+        llvm::StructType::create({llvm::Type::getInt8Ty(*ctx)}, "NandResult");
 
-    auto sig = llvm::FunctionType::get(llvm::Type::getVoidTy(*ctx),
-                                       {out->getPointerTo(),
-                                        llvm::Type::getInt1Ty(*ctx),
-                                        llvm::Type::getInt1Ty(*ctx)},
-                                       false);
+    auto sig = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*ctx),
+        {out->getPointerTo(), llvm::Type::getInt8Ty(*ctx)->getPointerTo(),
+         llvm::Type::getInt8Ty(*ctx), llvm::Type::getInt8Ty(*ctx)},
+        false);
 
     auto func = llvm::Function::Create(sig, llvm::Function::PrivateLinkage,
                                        "Nand", module.get());
@@ -209,7 +270,7 @@ struct CodegenVisitor : ast::Visitor {
 
     auto res_ptr = func->getArg(0);
     auto nand = ir_builder.CreateNot(
-        ir_builder.CreateAnd(func->getArg(1), func->getArg(2)));
+        ir_builder.CreateAnd(func->getArg(2), func->getArg(3)));
 
     auto res_slot = ir_builder.CreateStructGEP(out, res_ptr, 0);
 
@@ -232,6 +293,11 @@ struct CodegenVisitor : ast::Visitor {
   }
 
   virtual void visit(ast::Package &pkg) {
+    RegMemCounter c;
+    c.visit(pkg);
+    mem_per_chip = std::move(c.mem_per_chip);
+    reg_buf_offset = 0;
+
     for (auto &c : pkg.chips) {
       c->visit(*this);
     }
@@ -239,6 +305,7 @@ struct CodegenVisitor : ast::Visitor {
   }
 
   virtual void visit(ast::Chip &chip) {
+    reg_buf_offset = 0;
     if (chip.ident == "Nand") {
       return;
     }
@@ -248,13 +315,13 @@ struct CodegenVisitor : ast::Visitor {
     llvm::SmallVector<llvm::Type *> args;
     llvm::SmallVector<llvm::Type *> outputs;
 
+    auto out = get_llvm_type(chip.output_type);
+    args.push_back(out->getPointerTo());
+    args.push_back(ir_builder.getInt8Ty()->getPointerTo());
+
     for (auto &i : chip.inputs) {
       args.push_back(get_llvm_type(i->type, true));
     }
-
-    auto out = get_llvm_type(chip.output_type);
-
-    args.insert(args.begin(), out->getPointerTo());
 
     auto sig =
         llvm::FunctionType::get(llvm::Type::getVoidTy(*ctx), args, false);
@@ -273,7 +340,7 @@ struct CodegenVisitor : ast::Visitor {
     symbol_table.clear();
 
     for (int i = 0; i < chip.inputs.size(); i++) {
-      llvm::Value *arg = func->getArg(i + 1);
+      llvm::Value *arg = func->getArg(i + 2);
       arg->setName(chip.inputs[i]->ident);
       symbol_table[chip.inputs[i]->ident] = arg;
     }
@@ -339,8 +406,13 @@ struct CodegenVisitor : ast::Visitor {
     auto res_struct = llvm::cast<llvm::StructType>(res_type->getElementType());
 
     auto res = ir_builder.CreateAlloca(res_struct);
+    auto reg_buf = ir_builder.CreateConstGEP1_32(
+        ir_builder.getInt8Ty(), current_function->getArg(1), reg_buf_offset);
+
+    reg_buf_offset += mem_per_chip[expr.chip_name];
 
     params.push_back(res);
+    params.push_back(reg_buf);
 
     for (auto &a : expr.args) {
       a->visit(*this);
@@ -453,26 +525,17 @@ struct CodegenVisitor : ast::Visitor {
   }
 
   void visit(ast::CreateRegisterExpr &e) override {
-    auto llvm_type = get_llvm_type(e.result_type());
-
-    if (auto st = std::dynamic_pointer_cast<ast::SliceType>(e.result_type())) {
-      std::vector<llvm::Constant *> init(st->size, ir_builder.getInt1(0));
-      auto arr = llvm::ConstantArray::get(
-          llvm::cast<llvm::ArrayType>(llvm_type), init);
-      llvm::GlobalVariable *glob = new llvm::GlobalVariable(
-          *module, llvm_type, false, llvm::GlobalValue::PrivateLinkage, arr);
-      auto slot = ir_builder.CreateConstGEP2_32(llvm_type, glob, 0, 0);
-      results_stack.push(slot);
+    auto buf = ir_builder.CreateConstGEP1_32(
+        ir_builder.getInt8Ty(), current_function->getArg(1), reg_buf_offset);
+    if (auto t = std::dynamic_pointer_cast<ast::SliceType>(e.result_type())) {
+      reg_buf_offset += t->size;
     } else {
-      llvm::GlobalVariable *glob = new llvm::GlobalVariable(
-          *module, llvm_type, false, llvm::GlobalValue::PrivateLinkage,
-          ir_builder.getInt1(0));
-      results_stack.push(glob);
+      reg_buf_offset++;
     }
+    results_stack.push(buf);
   }
 
   void visit(ast::RegWrite &rw) override {
-
     rw.reg->visit(*this);
     auto reg = results_stack.top();
     results_stack.pop();
@@ -487,10 +550,10 @@ struct CodegenVisitor : ast::Visitor {
             std::dynamic_pointer_cast<ast::SliceType>(rw.reg->result_type())) {
       for (int i = 0; i < st->size; ++i) {
         auto slot =
-            ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), reg, i);
+            ir_builder.CreateConstGEP1_32(ir_builder.getInt8Ty(), reg, i);
         auto val_slot =
-            ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), val, i);
-        auto val_i = ir_builder.CreateLoad(ir_builder.getInt1Ty(), val_slot);
+            ir_builder.CreateConstGEP1_32(ir_builder.getInt8Ty(), val, i);
+        auto val_i = ir_builder.CreateLoad(ir_builder.getInt8Ty(), val_slot);
         ir_builder.CreateStore(val_i, slot);
       }
     } else {
@@ -513,11 +576,14 @@ struct CodegenVisitor : ast::Visitor {
   }
 };
 
-std::unique_ptr<llvm::Module>
-transform_pkg_to_llvm(llvm::LLVMContext *ctx, std::shared_ptr<ast::Package> pkg,
-                      std::string entrypoint) {
-  CodegenVisitor v(ctx, entrypoint);
+std::unique_ptr<Module>
+transform_pkg_to_module(std::unique_ptr<llvm::LLVMContext> ctx,
+                        std::shared_ptr<ast::Package> pkg,
+                        std::string entrypoint) {
+  CodegenVisitor v(ctx.get(), entrypoint);
   v.visit(*pkg);
-  return std::move(v.module);
+  auto size = v.mem_per_chip[entrypoint];
+
+  return std::make_unique<Module>(std::move(v.module), std::move(ctx), size);
 }
 } // namespace hdlc::jit
