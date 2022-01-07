@@ -26,6 +26,7 @@ struct SliceIdxExpr;
 struct SliceJoinExpr;
 struct SliceToWireCast;
 struct TupleToWireCast;
+struct CreateRegisterExpr;
 
 struct WireType;
 struct RegisterType;
@@ -49,6 +50,7 @@ struct Visitor {
   virtual void visit(SliceJoinExpr &e) = 0;
   virtual void visit(SliceToWireCast &e) = 0;
   virtual void visit(TupleToWireCast &e) = 0;
+  virtual void visit(CreateRegisterExpr &e) = 0;
 };
 
 struct TypeVisitor {
@@ -173,6 +175,15 @@ struct CastExpr : Expr {
   std::shared_ptr<Expr> expr;
 
   CastExpr(std::shared_ptr<Expr> expr);
+};
+
+struct CreateRegisterExpr : Expr {
+  std::shared_ptr<Type> res_type;
+
+  CreateRegisterExpr(std::shared_ptr<Type> res_type);
+
+  void visit(Visitor &v) override;
+  std::shared_ptr<Type> result_type() override;
 };
 
 struct SliceToWireCast : CastExpr {

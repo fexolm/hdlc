@@ -152,3 +152,44 @@ chip And4Way (a[4], b[4], ) res[4], {
 
   EXPECT_EQ(expected_result, ss.str());
 }
+
+TEST(RegistersTest, CreateAssignReadNoSlices) {
+  std::string code = R"(
+chip Prev (a) res {
+    r := Register()
+    r <- a
+    return <- r
+}
+)";
+
+  std::string expected_result = R"(Package: test_pkg
+
+chip Prev (a, ) res, {
+    r, := Register()
+    r <- a
+    return <- r, 
+}
+
+)";
+
+  auto pkg = ast::parse_package(code, "test_pkg");
+  std::stringstream ss;
+  ast::print_package(ss, pkg);
+
+  EXPECT_EQ(expected_result, ss.str());
+}
+
+TEST(RegistersTest, MultipleAssignee) {
+  GTEST_SKIP();
+  std::string code = R"(
+chip Prev (a) res {
+    r1, r2 := Register()
+    return <- r1, <- r2
+}
+)";
+
+  EXPECT_THROW_WITH_MESSAGE(ast::parse_package(code, "test_pkg"),
+                            ast::ParserError,
+                            "Parser error: unable to assign to multiple "
+                            "registers in single statement (line 2, pos 4)");
+}

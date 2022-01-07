@@ -54,8 +54,10 @@ RegRead::RegRead(std::shared_ptr<Value> reg) : reg(reg) {}
 void RegRead::visit(Visitor &v) { v.visit(*this); }
 
 std::shared_ptr<Type> RegRead::result_type() {
-  assert(false);
-  return nullptr;
+  if (auto t = std::dynamic_pointer_cast<SliceType>(reg->result_type())) {
+    return std::make_shared<SliceType>(std::make_shared<WireType>(), t->size);
+  }
+  return std::make_shared<WireType>();
 }
 
 CastExpr::CastExpr(std::shared_ptr<Expr> expr) : expr(expr) {}
@@ -95,6 +97,12 @@ std::shared_ptr<Type> SliceJoinExpr::result_type() {
   return std::make_shared<SliceType>(std::make_shared<WireType>(),
                                      values.size());
 }
+
+CreateRegisterExpr::CreateRegisterExpr(std::shared_ptr<Type> res_type)
+    : res_type(res_type) {}
+
+void CreateRegisterExpr::visit(Visitor &v) { v.visit(*this); }
+std::shared_ptr<Type> CreateRegisterExpr::result_type() { return res_type; }
 
 struct Printer : Visitor {
   std::ostream &out;
@@ -209,6 +217,8 @@ struct Printer : Visitor {
     out << "*";
     e.expr->visit(*this);
   }
+
+  void visit(CreateRegisterExpr &e) override { out << "Register()"; }
 };
 
 void print_package(std::ostream &out, std::shared_ptr<Package> pkg) {

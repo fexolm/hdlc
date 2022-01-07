@@ -374,9 +374,6 @@ struct CodegenVisitor : ast::Visitor {
     ir_builder.CreateRetVoid();
   }
 
-  virtual void visit(ast::RegWrite &rw) {}
-  virtual void visit(ast::RegRead &rr) {}
-
   void visit(ast::SliceJoinExpr &expr) override {
     auto res_type =
         llvm::cast<llvm::PointerType>(get_llvm_type(expr.result_type(), true));
@@ -431,6 +428,12 @@ struct CodegenVisitor : ast::Visitor {
     results_stack.push(
         ir_builder.CreateLoad(get_llvm_type(e.result_type()), element_ptr));
   }
+
+  void visit(ast::CreateRegisterExpr &e) override {}
+
+  void visit(ast::RegWrite &rw) override {}
+
+  void visit(ast::RegRead &rr) override {}
 };
 
 std::unique_ptr<llvm::Module>

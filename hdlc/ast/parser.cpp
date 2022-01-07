@@ -63,7 +63,7 @@ private:
     if (pos < data.size()) {
       auto sym = data[pos];
       if (sym == '\n') {
-        if (line_length.size() < line) {
+        if (line_length.size() <= line) {
           line_length.push_back(line_pos);
         }
         line++;
@@ -82,7 +82,7 @@ private:
       for (; pos < new_pos; read_symbol())
         ;
     } else {
-      for (; pos >= 0 && pos > new_pos; --pos) {
+      for (--pos; pos > new_pos; --pos) {
         if (data[pos] == '\n') {
           line--;
           line_pos = line_length[line];
@@ -366,12 +366,34 @@ private:
     return std::make_shared<SliceIdxExpr>(slice, begin, end);
   }
 
+  std::shared_ptr<CreateRegisterExpr> read_create_register() {
+    expect_symbol_sequence("Register");
+    skip_spaces();
+    expect_symbol_sequence("(");
+    skip_spaces();
+    std::shared_ptr<Type> register_type;
+    if (std::isdigit(peek_symbol())) {
+      auto size = read_uint();
+      skip_spaces();
+      register_type =
+          std::make_shared<SliceType>(std::make_shared<RegisterType>(), size);
+    } else {
+      register_type = std::make_shared<RegisterType>();
+    }
+    expect_symbol_sequence(")");
+
+    return std::make_shared<CreateRegisterExpr>(register_type);
+  }
+
   std::shared_ptr<Expr> read_expr(SymbolMap &symbol_map) {
     if (peek_symbol() == '<') {
       return read_reg_read(symbol_map);
     }
     if (peek_symbol() == '[') {
       return read_slice_join_expr(symbol_map);
+    }
+    if (peek_string() == "Register") {
+      return read_create_register();
     }
 
     auto cur_pos = pos;

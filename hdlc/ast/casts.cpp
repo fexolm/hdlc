@@ -26,21 +26,22 @@ struct InsertCastsVisitor : Visitor {
     }
   }
 
-  void visit(Value &val) {}
-
   void visit(AssignStmt &stmt) {
-    // Correctly propogate types at first as we don't do this at parsing time
-    auto args_count = stmt.assignees.size();
-    // TODO: Check
-    auto tuple_type =
-        std::static_pointer_cast<TupleType>(stmt.rhs->result_type());
+    if (std::dynamic_pointer_cast<CallExpr>(stmt.rhs)) {
+      // Correctly propogate types at first as we don't do this at parsing time
+      auto args_count = stmt.assignees.size();
+      // TODO: Check
+      auto tuple_type =
+          std::static_pointer_cast<TupleType>(stmt.rhs->result_type());
 
-    assert(tuple_type->element_types.size() == args_count);
+      assert(tuple_type->element_types.size() == args_count);
 
-    for (int i = 0; i < args_count; i++) {
-      auto type = tuple_type->element_types[i];
-      stmt.assignees[i]->type = type;
+      for (int i = 0; i < args_count; i++) {
+        auto type = tuple_type->element_types[i];
+        stmt.assignees[i]->type = type;
+      }
     }
+
     stmt.rhs->visit(*this);
   }
 
@@ -98,12 +99,6 @@ struct InsertCastsVisitor : Visitor {
     }
   }
 
-  void visit(RegWrite &rw) {}
-
-  void visit(RegRead &rr) {}
-
-  void visit(SliceIdxExpr &e) override {}
-
   void visit(SliceJoinExpr &e) override {
     for (auto se : e.values) {
       se->visit(*this);
@@ -115,8 +110,13 @@ struct InsertCastsVisitor : Visitor {
     }
   }
 
+  void visit(SliceIdxExpr &e) override {}
+  void visit(Value &val) {}
   void visit(SliceToWireCast &e) override {}
   void visit(TupleToWireCast &e) override {}
+  void visit(RegWrite &rw) {}
+  void visit(RegRead &rr) {}
+  void visit(CreateRegisterExpr &rr) {}
 };
 
 void insert_casts(std::shared_ptr<Package> pakage) {
