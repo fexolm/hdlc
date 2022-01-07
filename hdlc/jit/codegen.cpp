@@ -26,7 +26,9 @@ public:
     results_stack.push(llvm::Type::getInt1Ty(*ctx));
   }
 
-  virtual void visit(ast::RegisterType &reg) { assert(false); }
+  virtual void visit(ast::RegisterType &reg) {
+    results_stack.push(llvm::Type::getInt1Ty(*ctx));
+  }
 
   virtual void visit(ast::SliceType &slice) {
     slice.element_type->visit(*this);
@@ -70,6 +72,8 @@ struct CodegenVisitor : ast::Visitor {
   std::unordered_map<std::string, ast::Chip *> chips;
 
   std::unique_ptr<llvm::Module> module;
+
+  llvm::BasicBlock *update_reg_block;
 
   void initialize_prebuilt_chips() { add_nand(); }
 
@@ -262,6 +266,8 @@ struct CodegenVisitor : ast::Visitor {
 
     auto bb = llvm::BasicBlock::Create(*ctx, "chip_body", func);
 
+    update_reg_block = llvm::BasicBlock::Create(*ctx, "update_regs", func);
+
     ir_builder.SetInsertPoint(bb);
 
     symbol_table.clear();
@@ -282,6 +288,18 @@ struct CodegenVisitor : ast::Visitor {
 
     auto res = results_stack.top();
     results_stack.pop();
+
+    if (std::dynamic_pointer_cast<ast::RegisterType>(stmt.rhs->result_type())) {
+      symbol_table[stmt.assignees[0]->ident] = res;
+      return;
+    }
+
+    if (std::dynamic_pointer_cast<ast::WireType>(stmt.rhs->result_type())) {
+      symbol_table[stmt.assignees[0]->ident] = res;
+      return;
+    }
+
+    assert(std::dynamic_pointer_cast<ast::TupleType>(stmt.rhs->result_type()));
 
     auto struct_ptr_type = llvm::cast<llvm::PointerType>(res->getType());
     auto struct_type =
@@ -371,6 +389,8 @@ struct CodegenVisitor : ast::Visitor {
 
       store(slot, val, stmt.results[i]->result_type());
     }
+    ir_builder.CreateBr(update_reg_block);
+    ir_builder.SetInsertPoint(update_reg_block);
     ir_builder.CreateRetVoid();
   }
 
@@ -429,11 +449,39 @@ struct CodegenVisitor : ast::Visitor {
         ir_builder.CreateLoad(get_llvm_type(e.result_type()), element_ptr));
   }
 
-  void visit(ast::CreateRegisterExpr &e) override {}
+  void visit(ast::CreateRegisterExpr &e) override {
+    // slices are not supported yet
+    assert(!std::dynamic_pointer_cast<ast::SliceType>(e.result_type()));
 
-  void visit(ast::RegWrite &rw) override {}
+    llvm::GlobalVariable *glob = new llvm::GlobalVariable(
+        *module, get_llvm_type(e.result_type()), false,
+        llvm::GlobalValue::PrivateLinkage, ir_builder.getInt1(0));
 
-  void visit(ast::RegRead &rr) override {}
+    results_stack.push(glob);
+  }
+
+  void visit(ast::RegWrite &rw) override {
+
+    rw.reg->visit(*this);
+    auto reg = results_stack.top();
+    results_stack.pop();
+    rw.rhs->visit(*this);
+    auto val = results_stack.top();
+    results_stack.pop();
+
+    auto ip = ir_builder.saveIP();
+    ir_builder.SetInsertPoint(update_reg_block);
+    ir_builder.CreateStore(val, reg);
+    ir_builder.restoreIP(ip);
+  }
+
+  void visit(ast::RegRead &rr) override {
+    rr.reg->visit(*this);
+    auto val_ptr = results_stack.top();
+    results_stack.pop();
+    results_stack.push(
+        ir_builder.CreateLoad(get_llvm_type(rr.result_type()), val_ptr));
+  }
 };
 
 std::unique_ptr<llvm::Module>

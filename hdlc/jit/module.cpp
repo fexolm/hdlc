@@ -8,6 +8,7 @@ Module::Module(std::unique_ptr<llvm::Module> module,
   llvm::orc::LLJITBuilder jit_builder;
   jit = ExitOnErr(jit_builder.create());
 
+  module->print(llvm::outs(), nullptr);
   llvm::orc::ThreadSafeModule m(std::move(module), std::move(ctx));
   ExitOnErr(jit->addIRModule(std::move(m)));
 

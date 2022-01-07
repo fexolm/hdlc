@@ -40,6 +40,12 @@ chip CallArrayOfOne(a) res {
   tmp:= ArrayOfOne([a])
   return tmp[0]
 }
+
+chip Prev(a) res {
+  r := Register()
+  r <- a
+  return <- r
+}
 )";
 
 class TestChips : public ::testing::Test {
@@ -129,5 +135,13 @@ TEST_F(TestChips, StrangeAnd2Way) {
 TEST_F(TestChips, ArrayOfOne) {
   hdlc::Chip chip(g_code, "CallArrayOfOne");
   compare_results(chip, {0}, {0});
+  compare_results(chip, {1}, {1});
+}
+
+TEST_F(TestChips, Prev) {
+  hdlc::Chip chip(g_code, "Prev");
+  compare_results(chip, {1}, {0});
+  compare_results(chip, {0}, {1});
+  compare_results(chip, {1}, {0});
   compare_results(chip, {1}, {1});
 }
