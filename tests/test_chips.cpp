@@ -46,6 +46,12 @@ chip Prev(a) res {
   r <- a
   return <- r
 }
+
+chip PrevSlice(a[4]) res[4] {
+  r := Register(4)
+  r <- a
+  return <- r
+}
 )";
 
 class TestChips : public ::testing::Test {
@@ -144,4 +150,12 @@ TEST_F(TestChips, Prev) {
   compare_results(chip, {0}, {1});
   compare_results(chip, {1}, {0});
   compare_results(chip, {1}, {1});
+}
+
+TEST_F(TestChips, PrevSlice) {
+  hdlc::Chip chip(g_code, "PrevSlice");
+  compare_results(chip, {1, 0, 1, 0}, {0, 0, 0, 0});
+  compare_results(chip, {0, 1, 1, 1}, {1, 0, 1, 0});
+  compare_results(chip, {1, 1, 1, 1}, {0, 1, 1, 1});
+  compare_results(chip, {0, 0, 0, 0}, {1, 1, 1, 1});
 }

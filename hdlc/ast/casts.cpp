@@ -42,6 +42,9 @@ struct InsertCastsVisitor : Visitor {
       }
     }
 
+    if (std::dynamic_pointer_cast<CreateRegisterExpr>(stmt.rhs)) {
+      stmt.assignees[0]->type = stmt.rhs->result_type();
+    }
     stmt.rhs->visit(*this);
   }
 

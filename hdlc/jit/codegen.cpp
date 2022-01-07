@@ -299,7 +299,10 @@ struct CodegenVisitor : ast::Visitor {
       return;
     }
 
-    assert(std::dynamic_pointer_cast<ast::TupleType>(stmt.rhs->result_type()));
+    if (std::dynamic_pointer_cast<ast::SliceType>(stmt.rhs->result_type())) {
+      symbol_table[stmt.assignees[0]->ident] = res;
+      return;
+    }
 
     auto struct_ptr_type = llvm::cast<llvm::PointerType>(res->getType());
     auto struct_type =
@@ -450,14 +453,22 @@ struct CodegenVisitor : ast::Visitor {
   }
 
   void visit(ast::CreateRegisterExpr &e) override {
-    // slices are not supported yet
-    assert(!std::dynamic_pointer_cast<ast::SliceType>(e.result_type()));
+    auto llvm_type = get_llvm_type(e.result_type());
 
-    llvm::GlobalVariable *glob = new llvm::GlobalVariable(
-        *module, get_llvm_type(e.result_type()), false,
-        llvm::GlobalValue::PrivateLinkage, ir_builder.getInt1(0));
-
-    results_stack.push(glob);
+    if (auto st = std::dynamic_pointer_cast<ast::SliceType>(e.result_type())) {
+      std::vector<llvm::Constant *> init(st->size, ir_builder.getInt1(0));
+      auto arr = llvm::ConstantArray::get(
+          llvm::cast<llvm::ArrayType>(llvm_type), init);
+      llvm::GlobalVariable *glob = new llvm::GlobalVariable(
+          *module, llvm_type, false, llvm::GlobalValue::PrivateLinkage, arr);
+      auto slot = ir_builder.CreateConstGEP2_32(llvm_type, glob, 0, 0);
+      results_stack.push(slot);
+    } else {
+      llvm::GlobalVariable *glob = new llvm::GlobalVariable(
+          *module, llvm_type, false, llvm::GlobalValue::PrivateLinkage,
+          ir_builder.getInt1(0));
+      results_stack.push(glob);
+    }
   }
 
   void visit(ast::RegWrite &rw) override {
@@ -471,7 +482,21 @@ struct CodegenVisitor : ast::Visitor {
 
     auto ip = ir_builder.saveIP();
     ir_builder.SetInsertPoint(update_reg_block);
-    ir_builder.CreateStore(val, reg);
+
+    if (auto st =
+            std::dynamic_pointer_cast<ast::SliceType>(rw.reg->result_type())) {
+      for (int i = 0; i < st->size; ++i) {
+        auto slot =
+            ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), reg, i);
+        auto val_slot =
+            ir_builder.CreateConstGEP1_32(ir_builder.getInt1Ty(), val, i);
+        auto val_i = ir_builder.CreateLoad(ir_builder.getInt1Ty(), val_slot);
+        ir_builder.CreateStore(val_i, slot);
+      }
+    } else {
+      ir_builder.CreateStore(val, reg);
+    }
+
     ir_builder.restoreIP(ip);
   }
 
@@ -479,8 +504,12 @@ struct CodegenVisitor : ast::Visitor {
     rr.reg->visit(*this);
     auto val_ptr = results_stack.top();
     results_stack.pop();
-    results_stack.push(
-        ir_builder.CreateLoad(get_llvm_type(rr.result_type()), val_ptr));
+    if (std::dynamic_pointer_cast<ast::SliceType>(rr.result_type())) {
+      results_stack.push(val_ptr);
+    } else {
+      results_stack.push(
+          ir_builder.CreateLoad(get_llvm_type(rr.result_type()), val_ptr));
+    }
   }
 };
 
