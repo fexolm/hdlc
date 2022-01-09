@@ -1,21 +1,14 @@
 #pragma once
 
-#include "jit/module.h"
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace hdlc {
 
-class Chip {
-private:
-  std::unique_ptr<jit::Module> module;
-
-  std::vector<int8_t> reg_buf;
-
-public:
-  explicit Chip(const std::string &code, const std::string &chip_name);
-
-  void run(int8_t *intputs, int8_t *outputs);
+struct Chip {
+  virtual void run(int8_t *intputs, int8_t *outputs) = 0;
 };
+
+std::shared_ptr<Chip> create_chip(const std::string &code,
+                                  const std::string &chip_name);
 } // namespace hdlc

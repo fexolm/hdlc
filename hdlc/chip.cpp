@@ -6,29 +6,50 @@
 
 #include <fstream>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/Support/TargetSelect.h>
+
+#include <mutex>
+
+std::once_flag llvm_initialized;
 
 namespace hdlc {
-Chip::Chip(const std::string &code, const std::string &chip_name) {
-  auto pkg = ast::parse_package(code, "gates");
 
-  auto ctx = std::make_unique<llvm::LLVMContext>();
+struct ChipImpl : Chip {
+  std::unique_ptr<jit::Module> module;
+  std::vector<int8_t> reg_buf;
 
-  module = jit::transform_pkg_to_module(std::move(ctx), pkg, chip_name);
+  ChipImpl(const std::string &code, const std::string &chip_name) {
+    std::call_once(llvm_initialized, []() {
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+    });
 
-  auto requested_chip_iter =
-      std::find_if(pkg->chips.begin(), pkg->chips.end(),
-                   [&chip_name](auto &c) { return c->ident == chip_name; });
+    auto pkg = ast::parse_package(code, "gates");
 
-  if (requested_chip_iter == pkg->chips.end()) {
-    throw;
+    auto ctx = std::make_unique<llvm::LLVMContext>();
+
+    module = jit::transform_pkg_to_module(std::move(ctx), pkg, chip_name);
+
+    auto requested_chip_iter =
+        std::find_if(pkg->chips.begin(), pkg->chips.end(),
+                     [&chip_name](auto &c) { return c->ident == chip_name; });
+
+    if (requested_chip_iter == pkg->chips.end()) {
+      throw;
+    }
+
+    auto requested_chip = *requested_chip_iter;
+
+    reg_buf.resize(module->buffer_size());
   }
 
-  auto requested_chip = *requested_chip_iter;
+  void run(int8_t *inputs, int8_t *outputs) override {
+    module->run(reg_buf.data(), inputs, outputs);
+  }
+};
 
-  reg_buf.resize(module->buffer_size());
-}
-
-void Chip::run(int8_t *inputs, int8_t *outputs) {
-  module->run(reg_buf.data(), inputs, outputs);
+std::shared_ptr<Chip> create_chip(const std::string &code,
+                                  const std::string &chip_name) {
+  return std::make_shared<ChipImpl>(code, chip_name);
 }
 } // namespace hdlc
