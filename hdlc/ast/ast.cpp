@@ -105,18 +105,20 @@ void CreateRegisterExpr::visit(Visitor &v) { v.visit(*this); }
 std::shared_ptr<Type> CreateRegisterExpr::result_type() { return res_type; }
 
 struct Printer : Visitor {
+private:
   std::ostream &out;
 
+public:
   Printer(std::ostream &out) : out(out) {}
 
-  void visit(Package &pkg) {
+  void visit(Package &pkg) override {
     out << "Package: " << pkg.name << "\n\n";
     for (auto &c : pkg.chips) {
       c->visit(*this);
     }
   }
 
-  void visit(Chip &chip) {
+  void visit(Chip &chip) override {
     if (chip.ident == "Nand") {
       return;
     }
@@ -153,9 +155,9 @@ struct Printer : Visitor {
         << "\n\n";
   }
 
-  void visit(Value &val) { out << val.ident; }
+  void visit(Value &val) override { out << val.ident; }
 
-  void visit(AssignStmt &stmt) {
+  void visit(AssignStmt &stmt) override {
     out << "    ";
     for (auto &v : stmt.assignees) {
       v->visit(*this);
@@ -166,7 +168,7 @@ struct Printer : Visitor {
     stmt.rhs->visit(*this);
   }
 
-  void visit(CallExpr &expr) {
+  void visit(CallExpr &expr) override {
     out << expr.chip_name << "(";
     for (auto &arg : expr.args) {
       arg->visit(*this);
@@ -175,7 +177,7 @@ struct Printer : Visitor {
     out << ")";
   }
 
-  void visit(RetStmt &stmt) {
+  void visit(RetStmt &stmt) override {
     out << "    return ";
     for (auto &v : stmt.results) {
       v->visit(*this);
@@ -183,14 +185,14 @@ struct Printer : Visitor {
     }
   }
 
-  void visit(RegWrite &rw) {
+  void visit(RegWrite &rw) override {
     out << "    ";
     rw.reg->visit(*this);
     out << " <- ";
     rw.rhs->visit(*this);
   }
 
-  void visit(RegRead &rr) {
+  void visit(RegRead &rr) override {
     out << "<- ";
     rr.reg->visit(*this);
   }
@@ -202,7 +204,7 @@ struct Printer : Visitor {
 
   void visit(SliceJoinExpr &e) override {
     out << "[";
-    for (auto se : e.values) {
+    for (auto &se : e.values) {
       se->visit(*this);
       out << ",";
     }
@@ -218,7 +220,7 @@ struct Printer : Visitor {
     e.expr->visit(*this);
   }
 
-  void visit(CreateRegisterExpr &e) override { out << "Register()"; }
+  void visit(CreateRegisterExpr &) override { out << "Register()"; }
 };
 
 void print_package(std::ostream &out, std::shared_ptr<Package> pkg) {

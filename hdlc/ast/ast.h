@@ -35,6 +35,7 @@ struct TupleType;
 
 struct Node {
   virtual void visit(Visitor &v) = 0;
+  virtual ~Node() = default;
 };
 
 struct Visitor {
@@ -51,6 +52,7 @@ struct Visitor {
   virtual void visit(SliceToWireCast &e) = 0;
   virtual void visit(TupleToWireCast &e) = 0;
   virtual void visit(CreateRegisterExpr &e) = 0;
+  virtual ~Visitor() = default;
 };
 
 struct TypeVisitor {
@@ -58,6 +60,7 @@ struct TypeVisitor {
   virtual void visit(RegisterType &) = 0;
   virtual void visit(SliceType &) = 0;
   virtual void visit(TupleType &) = 0;
+  virtual ~TypeVisitor() = default;
 };
 
 struct Package : Node {
@@ -81,14 +84,15 @@ struct Chip : Node {
 };
 struct Type {
   virtual void visit(TypeVisitor &v) = 0;
+  virtual ~Type() = default;
 };
 
 struct WireType : Type {
-  virtual void visit(TypeVisitor &v);
+  void visit(TypeVisitor &v) override;
 };
 
 struct RegisterType : Type {
-  virtual void visit(TypeVisitor &v);
+  void visit(TypeVisitor &v) override;
 };
 
 struct SliceType : Type {
@@ -97,7 +101,7 @@ struct SliceType : Type {
 
   SliceType(std::shared_ptr<Type> element_type, size_t size);
 
-  virtual void visit(TypeVisitor &v);
+  void visit(TypeVisitor &v) override;
 };
 
 struct TupleType : Type {
@@ -106,7 +110,7 @@ struct TupleType : Type {
   TupleType(std::vector<std::shared_ptr<Type>> types,
             std::vector<std::string> names);
 
-  virtual void visit(TypeVisitor &v);
+  void visit(TypeVisitor &v) override;
 };
 
 struct Stmt : Node {};
@@ -132,7 +136,7 @@ struct CallExpr : Expr {
 
   void visit(Visitor &v) override;
 
-  virtual std::shared_ptr<Type> result_type();
+  std::shared_ptr<Type> result_type() override;
 };
 
 struct Value : Expr {
@@ -143,7 +147,7 @@ struct Value : Expr {
 
   void visit(Visitor &v) override;
 
-  virtual std::shared_ptr<Type> result_type();
+  std::shared_ptr<Type> result_type() override;
 };
 
 struct RetStmt : Stmt {

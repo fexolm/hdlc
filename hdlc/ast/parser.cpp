@@ -27,13 +27,13 @@ public:
       auto out_types =
           std::vector<std::shared_ptr<Type>>{std::make_shared<WireType>()};
       auto out_names = std::vector<std::string>{std::string("res")};
+
+      auto a = std::make_shared<Value>("a", std::make_shared<WireType>());
+      auto b = std::make_shared<Value>("b", std::make_shared<WireType>());
+      auto res_type = std::make_shared<TupleType>(out_types, out_names);
       chips["Nand"] = std::make_shared<Chip>(
-          "Nand",
-          std::vector<std::shared_ptr<Value>>{
-              std::make_shared<Value>("a", std::make_shared<WireType>()),
-              std::make_shared<Value>("b", std::make_shared<WireType>())},
-          std::make_shared<TupleType>(out_types, out_names),
-          std::vector<std::shared_ptr<Stmt>>{});
+          "Nand", std::vector<std::shared_ptr<ast::Value>>{a, b}, res_type,
+          std::vector<std::shared_ptr<ast::Stmt>>{});
       res->chips.push_back(chips["Nand"]);
     }
 
@@ -141,7 +141,7 @@ private:
   }
 
   void expect_symbol_sequence(std::string_view seq) {
-    for (int i = 0; i < seq.size(); ++i) {
+    for (size_t i = 0; i < seq.size(); ++i) {
       if (read_symbol() != seq[i]) {
         throw ParserError(std::string("expected ") + seq.data() + " keryword",
                           line, line_pos);
@@ -205,7 +205,7 @@ private:
   uint64_t read_uint() {
     uint64_t res = 0;
     while (std::isdigit(peek_symbol())) {
-      res *= 10;
+      res *= 10; // NOLINT
       res += read_symbol() - '0';
     }
     return res;
@@ -291,16 +291,14 @@ private:
 
     if (w == "return") {
       return read_ret_stmt(symbol_map);
-    } else {
-
-      // TODO: add regWriteStmt support
-      auto saved_pos = pos;
-      try {
-        return read_assign_stmt(symbol_map);
-      } catch (ParserError &e) {
-        move_to(saved_pos);
-        return read_reg_write(symbol_map);
-      }
+    }
+    // TODO: add regWriteStmt support
+    auto saved_pos = pos;
+    try {
+      return read_assign_stmt(symbol_map);
+    } catch (ParserError &e) {
+      move_to(saved_pos);
+      return read_reg_write(symbol_map);
     }
   }
 

@@ -8,14 +8,14 @@ struct InsertCastsVisitor : Visitor {
   Package *cur_pkg;
   Chip *cur_chip;
 
-  void visit(Package &pkg) {
+  void visit(Package &pkg) override {
     cur_pkg = &pkg;
     for (auto &c : pkg.chips) {
       c->visit(*this);
     }
   }
 
-  void visit(Chip &chip) {
+  void visit(Chip &chip) override {
     if (chip.ident == "Nand") {
       return;
     }
@@ -26,7 +26,7 @@ struct InsertCastsVisitor : Visitor {
     }
   }
 
-  void visit(AssignStmt &stmt) {
+  void visit(AssignStmt &stmt) override {
     if (std::dynamic_pointer_cast<CallExpr>(stmt.rhs)) {
       // Correctly propogate types at first as we don't do this at parsing time
       auto args_count = stmt.assignees.size();
@@ -36,7 +36,7 @@ struct InsertCastsVisitor : Visitor {
 
       assert(tuple_type->element_types.size() == args_count);
 
-      for (int i = 0; i < args_count; i++) {
+      for (size_t i = 0; i < args_count; i++) {
         auto type = tuple_type->element_types[i];
         stmt.assignees[i]->type = type;
       }
@@ -55,7 +55,7 @@ struct InsertCastsVisitor : Visitor {
         return expr;
       }
       if (auto st = std::dynamic_pointer_cast<SliceType>(expr->result_type())) {
-        assert(st->size = 1);
+        assert(st->size == 1);
         return std::make_shared<SliceToWireCast>(expr);
       }
       auto tt = std::dynamic_pointer_cast<TupleType>(expr->result_type());
@@ -73,7 +73,7 @@ struct InsertCastsVisitor : Visitor {
     return nullptr;
   }
 
-  void visit(CallExpr &expr) {
+  void visit(CallExpr &expr) override {
     for (auto &arg : expr.args) {
       arg->visit(*this);
     }
@@ -85,18 +85,18 @@ struct InsertCastsVisitor : Visitor {
     // TODO: throw
     assert(chip_iter != cur_pkg->chips.end());
 
-    for (int i = 0; i < expr.args.size(); ++i) {
+    for (size_t i = 0; i < expr.args.size(); ++i) {
       auto type = (*chip_iter)->inputs[i]->type;
       expr.args[i] = cast(expr.args[i], type);
     }
   }
 
-  void visit(RetStmt &stmt) {
+  void visit(RetStmt &stmt) override {
     for (auto &v : stmt.results) {
       v->visit(*this);
     }
     assert(stmt.results.size() == cur_chip->output_type->element_types.size());
-    for (int i = 0; i < stmt.results.size(); ++i) {
+    for (size_t i = 0; i < stmt.results.size(); ++i) {
       auto type = cur_chip->output_type->element_types[i];
       stmt.results[i] = cast(stmt.results[i], type);
     }
@@ -108,18 +108,18 @@ struct InsertCastsVisitor : Visitor {
     }
     auto slice_type = std::static_pointer_cast<SliceType>(e.result_type());
 
-    for (int i = 0; i < e.values.size(); ++i) {
+    for (size_t i = 0; i < e.values.size(); ++i) {
       e.values[i] = cast(e.values[i], slice_type->element_type);
     }
   }
 
-  void visit(SliceIdxExpr &e) override {}
-  void visit(Value &val) {}
-  void visit(SliceToWireCast &e) override {}
-  void visit(TupleToWireCast &e) override {}
-  void visit(RegWrite &rw) {}
-  void visit(RegRead &rr) {}
-  void visit(CreateRegisterExpr &rr) {}
+  void visit(SliceIdxExpr &) override {}
+  void visit(Value &) override {}
+  void visit(SliceToWireCast &) override {}
+  void visit(TupleToWireCast &) override {}
+  void visit(RegWrite &) override {}
+  void visit(RegRead &) override {}
+  void visit(CreateRegisterExpr &) override {}
 };
 
 void insert_casts(std::shared_ptr<Package> pakage) {

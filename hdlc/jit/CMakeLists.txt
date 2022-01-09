@@ -1,2 +1,5 @@
 add_library(jit codegen.cpp module.cpp)
 target_link_libraries(jit ${llvm_libs})
+target_compile_options(jit PRIVATE ${COMPILER_FLAGS})
+target_link_options(jit PRIVATE ${LINKER_FLAGS})
+set_target_properties(jit PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_OPTS}")

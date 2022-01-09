@@ -67,7 +67,7 @@ protected:
     std::vector<int8_t> real_outputs(expected_outputs.size());
     chip.run(inputs.data(), real_outputs.data());
 
-    for (int i = 0; i < real_outputs.size(); ++i) {
+    for (size_t i = 0; i < real_outputs.size(); ++i) {
       EXPECT_EQ(real_outputs[i], expected_outputs[i]);
     }
   }
@@ -83,7 +83,7 @@ TEST_F(TestChips, And) {
 
 TEST_F(TestChips, And3) {
   auto chip = hdlc::create_chip(g_code, "And3");
-  for (int x = 0; x < 7; x++) {
+  for (size_t x = 0; x < 7; x++) {
     char a = x & 1;
     char b = (x >> 1) & 1;
     char c = (x >> 2) & 1;

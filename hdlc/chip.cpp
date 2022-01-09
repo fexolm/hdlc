@@ -10,15 +10,16 @@
 
 #include <mutex>
 
-std::once_flag llvm_initialized;
-
 namespace hdlc {
 
 struct ChipImpl : Chip {
   std::unique_ptr<jit::Module> module;
   std::vector<int8_t> reg_buf;
 
-  ChipImpl(const std::string &code, const std::string &chip_name) {
+  ChipImpl(const std::string &code, const std::string &chip_name)
+      : module(nullptr), reg_buf(0) {
+    static std::once_flag llvm_initialized;
+
     std::call_once(llvm_initialized, []() {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
