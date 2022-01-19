@@ -33,7 +33,7 @@ llvm_map_components_to_libnames(llvm_libs
 set(COMPILER_FLAGS
     -Wall
     -Werror
-    -Wextra
+    #-Wextra
     -Wpedantic
 )
 

@@ -1,7 +1,7 @@
 #include "ast.h"
 
 namespace hdlc::ast {
-void Package::visit(Visitor &v) { v.visit(*this); };
+void Package::visit(Visitor &v) { v.visit(*this); }
 
 Chip::Chip(std::string ident, std::vector<std::shared_ptr<Value>> inputs,
            std::shared_ptr<TupleType> output_type,
@@ -228,4 +228,4 @@ void print_package(std::ostream &out, std::shared_ptr<Package> pkg) {
   p.visit(*pkg);
 }
 
-}; // namespace hdlc::ast
+} // namespace hdlc::ast
