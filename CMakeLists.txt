@@ -18,7 +18,7 @@ find_package(LLVM REQUIRED 12 CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 llvm_map_components_to_libnames(llvm_libs 
@@ -33,7 +33,7 @@ llvm_map_components_to_libnames(llvm_libs
 set(COMPILER_FLAGS
     -Wall
     -Werror
-    #-Wextra
+    -Wextra
     -Wpedantic
 )
 
