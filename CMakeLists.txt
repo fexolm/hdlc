@@ -13,7 +13,7 @@ option(ENABLE_CLANG_TIDY "Runs clang tidy in compile time" off)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-find_package(LLVM REQUIRED CONFIG)
+find_package(LLVM REQUIRED 12 CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -42,7 +42,10 @@ if(ENABLE_SANITIZERS)
         -fsanitize=address
         -fsanitize=undefined
     )
-    list(APPEND LINKER_FLAGS -lasan)
+    list(APPEND LINKER_FLAGS
+        -fsanitize=address 
+        -fsanitize=undefined
+    )
 endif()
 
 if(ENABLE_CLANG_TIDY)
@@ -72,6 +75,7 @@ if(ENABLE_CLANG_TIDY)
         -readability-implicit-bool-conversion,\
         -readability-braces-around-statements,\
         -misc-no-recursion,\
+        -cppcoreguidelines-init-variables,\
         ")
 
     set(CLANG_TIDY_OPTS "clang-tidy;--extra-arg-before=-std=c++17;-checks=${CLANG_TIDY_ENABLED_DIAGNOSTICS},${CLANG_TIDY_DIRTY_DISABLED_DIAGNOSTICS},${CLANG_TIDY_REAL_DISABLED_DIAGNOSTICS}")
