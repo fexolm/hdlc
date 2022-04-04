@@ -179,6 +179,95 @@ chip Prev (a, ) res, {
   EXPECT_EQ(expected_result, ss.str());
 }
 
+TEST(SlicesTest, SliceAsLhs_Register) {
+  std::string code = R"(
+chip Prev (a) res {
+  r[2:4] := Register()
+  return r
+}
+)";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: expected <- keryword (line 2, pos 5)");
+}
+
+TEST(SlicesTest, SliceAsInput) {
+  std::string code = R"(
+    chip Prev (a[3:5]) res {
+
+    })
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: expected ] keryword (line 1, pos 19)");
+}
+
+TEST(SlicesTest, SliceAsRes) {
+  std::string code = R"(
+    chip Prev (a) res[1:5] {
+      return res
+    })
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: expected ] keryword (line 1, pos 24)");
+}
+
+TEST(SlicesTest, SliceWithLetter) {
+  std::string code = R"(
+    chip Prev (a) res {
+      return a[1:b]
+    })
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: expected ] keryword (line 2, pos 19)");
+}
+
+TEST(SlicesTest, NotFullSlice) {
+  std::string code = R"(
+    chip Prev (a) res {
+      return a[1:5
+    })
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: expected ] keryword (line 3, pos 5)");
+}
+
+TEST(RegistersTest, PassRegisterAsWire) {
+  GTEST_SKIP();
+  std::string code = R"(
+    chip Foo (a) res {
+      r := Register()
+      tmp := Nand(r, r)
+    }
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: Cannot use register as wire (line 3, pos 19)");
+}
+
+TEST(ParsersTest, LostColonAssign) {
+  GTEST_SKIP();
+  std::string code = R"(
+    chip Foo (a) res {
+      tmp = Nand(a, a)
+      return res
+    }
+  )";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      ast::parse_package(code, "test_pkg"), ast::ParserError,
+      "Parser error: Expected one of ':=' or '<-' (line 2, pos 12)");
+}
+
 TEST(RegistersTest, MultipleAssignee) {
   GTEST_SKIP();
   std::string code = R"(

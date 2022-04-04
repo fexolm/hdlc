@@ -11,6 +11,10 @@ chip And (a, b) res {
     return res
 }
 
+chip Or (a, b) res {
+  return Nand (Nand (a, a), Nand (b, b))
+}
+
 chip And3(a, b, c) res {
 	tmp := And(a, b)
 	res := And(tmp, c)
@@ -78,6 +82,14 @@ TEST_F(TestChips, And) {
   compare_results(*chip, {0, 0}, {0});
   compare_results(*chip, {0, 1}, {0});
   compare_results(*chip, {1, 0}, {0});
+  compare_results(*chip, {1, 1}, {1});
+}
+
+TEST_F(TestChips, Or) {
+  auto chip = hdlc::create_chip(g_code, "Or");
+  compare_results(*chip, {0, 0}, {0});
+  compare_results(*chip, {0, 1}, {1});
+  compare_results(*chip, {1, 0}, {1});
   compare_results(*chip, {1, 1}, {1});
 }
 
